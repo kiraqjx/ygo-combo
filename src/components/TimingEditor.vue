@@ -177,17 +177,19 @@ function describeRules(rules: RuleMoves): string[] {
   const out: string[] = []
   if (rules.setup.length) out.push('发动时置入魔陷区')
   if (draft.value.operation === 'tributeSummon' && rules.cost.length) out.push('祭品解放已记入 cost')
-  if (!isActivation.value) {
-    if (rules.effect.length) {
-      const move = rules.effect[0]
-      out.push(`已生成主移动：${ZONE_LABELS[move.from]} → ${ZONE_LABELS[move.to]}`)
-    }
-    if (!out.length) out.push('本操作没有必定发生的规则移动，可直接手填')
-    return out
+  if (rules.effect.length) {
+    const move = rules.effect[0]
+    out.push(`已生成主移动：${ZONE_LABELS[move.from]} → ${ZONE_LABELS[move.to]}`)
   }
   if (rules.settle.some((move) => move.to === 'extra')) out.push('结算后表侧加入额外卡组')
   else if (rules.settle.length) out.push('结算后送去墓地')
-  else out.push('结算后留场（永续 / 装备 / 场地）')
+  else if (
+    (isActivation.value || draft.value.operation === 'specialSummon') &&
+    (card.value?.frame === 'spell' || card.value?.frame === 'trap')
+  ) {
+    out.push('结算后留场（永续 / 装备 / 场地）')
+  }
+  if (!out.length) out.push('本操作没有必定发生的规则移动，可直接手填')
   return out
 }
 

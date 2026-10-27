@@ -241,6 +241,20 @@ function expand(cards: ZoneCard[] = []): string[] {
   return out
 }
 
+/** 有格位记录时按格位排列（空位画空槽），否则退回顺排 */
+function slotNames(cards: ZoneCard[], slots?: (ZoneCard | null)[]): (string | null)[] {
+  if (!slots?.length) return expand(cards)
+  const row: (string | null)[] = slots.map((card) => card?.name || null)
+  const rest = expand(cards)
+  for (const name of row) {
+    if (!name) continue
+    const index = rest.indexOf(name)
+    if (index >= 0) rest.splice(index, 1)
+  }
+  row.push(...rest)
+  return row
+}
+
 const countOf = (cards: ZoneCard[] = []) => cards.reduce((sum, card) => sum + card.count, 0)
 
 function drawCard(
@@ -359,12 +373,13 @@ function drawSlotRow(
   zone: ZoneId,
   label: string,
   cards: ZoneCard[],
+  slots: (ZoneCard | null)[] | undefined,
   highlight: boolean,
   kindOf: (name: string) => CardKind,
   imageOf: (name: string) => CanvasImageSource | null,
   badgeOf: (zone: ZoneId, name: string) => string,
 ) {
-  const items = expand(cards)
+  const items = slotNames(cards, slots)
   const rowX = l.slotsX
   const rowY = y
 
@@ -562,6 +577,7 @@ export function drawBoardFrame(
     'field',
     '怪兽区',
     paint.snapshot.field,
+    paint.snapshot.fieldSlots,
     highlight.includes('field'),
     kindOf,
     imageOf,
@@ -574,6 +590,7 @@ export function drawBoardFrame(
     'st',
     '魔陷区',
     paint.snapshot.st,
+    paint.snapshot.stSlots,
     highlight.includes('st'),
     kindOf,
     imageOf,

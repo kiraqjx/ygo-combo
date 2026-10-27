@@ -16,7 +16,14 @@ import type {
   ZoneId,
   ZoneSnapshot,
 } from '@/types'
-import { OPERATION_DEFS, TRACKED_ZONES, UNKNOWN_CARD, ZONE_LABELS, ZONE_ORDER } from '@/types'
+import {
+  OPERATION_DEFS,
+  SLOT_COUNT,
+  TRACKED_ZONES,
+  UNKNOWN_CARD,
+  ZONE_LABELS,
+  ZONE_ORDER,
+} from '@/types'
 import { HANDTRAPS, HANDTRAP_MAP } from './handtraps'
 
 /** 根据上游移动的起止区域判断这条链属于哪种衔接 */
@@ -75,11 +82,68 @@ function toList(map: Map<string, number>): ZoneCard[] {
   return [...map.entries()].map(([name, count]) => ({ name, count }))
 }
 
-function snapshot(ledger: Ledger, summons: number): ZoneSnapshot {
+/* ------------------------------------------------------------------ */
+/* 场上格位（怪兽区 / 魔陷区 1-5）                                        */
+/* ------------------------------------------------------------------ */
+
+type SlotRow = (string | null)[]
+
+/** 怪兽区 / 魔陷区按格位记录卡名（下标 = 格位 - 1） */
+interface Slots {
+  field: SlotRow
+  st: SlotRow
+}
+
+const isSlotZone = (zone: ZoneId): zone is 'field' | 'st' => zone === 'field' || zone === 'st'
+
+function emptySlots(): Slots {
+  return { field: Array(SLOT_COUNT).fill(null), st: Array(SLOT_COUNT).fill(null) }
+}
+
+/** 1-5 之外的格位一律夹到两端的有效格位 */
+function slotIndex(slot?: number): number | null {
+  if (!slot || !Number.isFinite(slot) || slot < 1) return null
+  return Math.min(Math.floor(slot), SLOT_COUNT) - 1
+}
+
+/** 进场：先放指定格位，放不下（被占 / 多张）再从前往后补空位 */
+function placeSlot(row: SlotRow, name: string, slot: number | undefined, count: number) {
+  let placed = 0
+  const preferred = slotIndex(slot)
+  if (preferred !== null && (!row[preferred] || row[preferred] === name)) {
+    row[preferred] = name
+    placed += 1
+  }
+  for (let i = 0; i < SLOT_COUNT && placed < count; i += 1) {
+    if (!row[i]) {
+      row[i] = name
+      placed += 1
+    }
+  }
+}
+
+/** 离场：把这张卡占用的格位清空 */
+function clearSlot(row: SlotRow, name: string, count: number) {
+  let cleared = 0
+  for (let i = 0; i < row.length && cleared < count; i += 1) {
+    if (row[i] === name) {
+      row[i] = null
+      cleared += 1
+    }
+  }
+}
+
+function slotCards(row: SlotRow): (ZoneCard | null)[] {
+  return row.map((name) => (name ? { name, count: 1 } : null))
+}
+
+function snapshot(ledger: Ledger, summons: number, slots: Slots): ZoneSnapshot {
   return {
     hand: toList(ledger.hand),
     field: toList(ledger.field),
     st: toList(ledger.st),
+    fieldSlots: slotCards(slots.field),
+    stSlots: slotCards(slots.st),
     gy: toList(ledger.gy),
     banish: toList(ledger.banish),
     extra: toList(ledger.extra),
@@ -102,7 +166,7 @@ export function initialLedger(combo: Combo): Ledger {
 }
 
 export function startingZones(combo: Combo): ZoneSnapshot {
-  return snapshot(initialLedger(combo), 0)
+  return snapshot(initialLedger(combo), 0, emptySlots())
 }
 
 /* ------------------------------------------------------------------ */
@@ -197,6 +261,7 @@ const isSummonMove = (move: CardMove) => move.to === 'field' && move.from !== 'f
 
 function applyMove(
   ledger: Ledger,
+  slots: Slots,
   origin: Map<string, Origin>,
   move: CardMove,
   timing: Timing,
@@ -220,6 +285,7 @@ function applyMove(
       reasons.push(`${unknown ? UNKNOWN_CARD : `「${key}」`}不足（${ZONE_LABELS[from]}），已按可用处理`)
     }
   }
+  if (isSlotZone(from)) clearSlot(slots[from], key, count)
 
   // 使用上游产出的卡 → 记一条链（必须来自同一个区域，避免同名卡错连）
   if (trackLinks && tracked && !unknown) {
@@ -243,6 +309,7 @@ function applyMove(
   }
 
   addCard(ledger[move.to], key, count)
+  if (isSlotZone(move.to)) placeSlot(slots[move.to], key, move.slot, count)
 
   if (trackLinks && !unknown && TRACKED_ZONES.includes(move.to)) {
     origin.set(key, {
@@ -260,6 +327,7 @@ function applyMove(
 
 function run(combo: Combo, opts: RunOptions): RunResult {
   const ledger = initialLedger(combo)
+  const slots = emptySlots()
   const origin = new Map<string, Origin>()
   const links: TimingLink[] = []
   const states: TimingState[] = []
@@ -268,7 +336,7 @@ function run(combo: Combo, opts: RunOptions): RunResult {
   let summons = 0
 
   combo.timings.forEach((timing, index) => {
-    const before = snapshot(ledger, summons)
+    const before = snapshot(ledger, summons, slots)
     /** 发动处理 + cost 已结算、效果还没处理的场面 */
     let activated = before
     const reasons: string[] = []
@@ -288,7 +356,7 @@ function run(combo: Combo, opts: RunOptions): RunResult {
     ) => {
       if (!moves.length) return
       for (const move of moves) {
-        summons += applyMove(ledger, origin, move, timing, index, links, trackLinks, tags, reasons)
+        summons += applyMove(ledger, slots, origin, move, timing, index, links, trackLinks, tags, reasons)
       }
       frames.push({
         id: `${timing.id}:${phase}`,
@@ -298,7 +366,7 @@ function run(combo: Combo, opts: RunOptions): RunResult {
         label,
         moves,
         chains,
-        snapshot: snapshot(ledger, summons),
+        snapshot: snapshot(ledger, summons, slots),
       })
     }
 
@@ -399,7 +467,7 @@ function run(combo: Combo, opts: RunOptions): RunResult {
       )
 
       // 发动后：主卡效果与连锁结算都已处理完，只剩送墓 / 回额外这类结算后去向
-      activated = snapshot(ledger, summons)
+      activated = snapshot(ledger, summons, slots)
 
       // 9. 结算后（魔陷区 → 墓地 / 额外）：规则处理，效果被无效也照常
       applyPhase(timing.settle, 'settle', '结算后去向', opts.trackLinks, [])
@@ -414,7 +482,7 @@ function run(combo: Combo, opts: RunOptions): RunResult {
       reasons,
       before,
       activated: status === 'broken' ? before : activated,
-      after: status === 'broken' ? before : snapshot(ledger, summons),
+      after: status === 'broken' ? before : snapshot(ledger, summons, slots),
       summonsAfter: summons,
     })
   })

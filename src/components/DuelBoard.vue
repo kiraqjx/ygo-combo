@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import type { CardData, ZoneCard, ZoneId, ZoneSnapshot } from '@/types'
-import { ZONE_LABELS } from '@/types'
+import { SLOT_COUNT, ZONE_LABELS } from '@/types'
 import { cardImageUrl } from '@/lib/cardDb'
 import { useCardStore } from '@/stores/cards'
 import CardDetail from './CardDetail.vue'
@@ -59,10 +59,19 @@ function inspect(card: ZoneCard) {
 const limit = computed(() => props.pileLimit ?? 8)
 const hand = computed(() => expanded('hand'))
 
-function slotRow(zone: ZoneId) {
-  const cards = expanded(zone)
-  const size = Math.max(props.slots ?? 5, cards.length)
-  return Array.from({ length: size }, (_, index) => cards[index] || null)
+/** 按账本记下的格位摆放；格位放不下的卡（同格多张 / 溢出）顺排补在末尾 */
+function slotRow(zone: 'field' | 'st') {
+  const slots = (zone === 'field' ? props.snapshot.fieldSlots : props.snapshot.stSlots) || []
+  const row: (ZoneCard | null)[] = slots.length ? [...slots] : []
+  const rest = expanded(zone)
+  for (const card of row) {
+    if (!card) continue
+    const index = rest.findIndex((item) => item.name === card.name)
+    if (index >= 0) rest.splice(index, 1)
+  }
+  row.push(...rest)
+  const size = Math.max(props.slots ?? SLOT_COUNT, row.length)
+  return Array.from({ length: size }, (_, index) => row[index] || null)
 }
 
 const fieldSlots = computed(() => slotRow('field'))

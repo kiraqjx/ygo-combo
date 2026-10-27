@@ -49,6 +49,9 @@ export const TRACKED_ZONES: ZoneId[] = ['hand', 'field', 'st', 'gy', 'banish']
 /** 未知卡片在账本里的占位名 */
 export const UNKNOWN_CARD = '未知卡片'
 
+/** 怪兽区 / 魔陷区的格位数（1-5 号位） */
+export const SLOT_COUNT = 5
+
 /** 目前只记录我方操作 */
 
 /* ------------------------------------------------------------------ */
@@ -87,6 +90,8 @@ export interface CardMove {
   from: ZoneId
   to: ZoneId
   phase: MovePhase
+  /** 落到怪兽区 / 魔陷区时指定的格位（1-5），留空则自动顺排空位 */
+  slot?: number
   /** 由规则自动生成（切换操作 / 区域 / 卡片时会重新计算，不会动用户手写的段） */
   auto?: boolean
   /** 这一段可被哪些手坑阻止（cost 段不使用） */
@@ -191,6 +196,10 @@ export interface ZoneSnapshot {
   hand: ZoneCard[]
   field: ZoneCard[]
   st: ZoneCard[]
+  /** 怪兽区按格位摆放（下标 = 格位 - 1），决斗盘按格位渲染 */
+  fieldSlots: (ZoneCard | null)[]
+  /** 魔陷区按格位摆放（下标 = 格位 - 1） */
+  stSlots: (ZoneCard | null)[]
   gy: ZoneCard[]
   banish: ZoneCard[]
   extra: ZoneCard[]

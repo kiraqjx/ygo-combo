@@ -168,9 +168,20 @@ export function autoRuleMoves({ operation, card, cardName, from }: RuleInput): R
       return out
     }
 
-    case 'specialSummon':
+    case 'specialSummon': {
+      // 魔法 / 陷阱卡靠效果特召：它同样是"发动"，有置入魔陷区与结算后去向
+      if (isSpellTrap) {
+        if (zone !== 'st') out.setup.push(ruleMove(cardName, zone, 'st', 'auto', '发动时置入魔陷区'))
+        if (isPendulumSpell) {
+          out.settle.push(ruleMove(cardName, 'st', 'extra', 'auto', '灵摆魔法结算后表侧加入额外卡组'))
+          return out
+        }
+        if (!stays) out.settle.push(ruleMove(cardName, 'st', 'gy', 'auto', '结算后送去墓地'))
+        return out
+      }
       out.effect.push(ruleMove(cardName, zone, 'field', 'effect', '特殊召唤到场上'))
       return out
+    }
 
     case 'set':
       out.effect.push(ruleMove(cardName, zone, 'st', 'effect', '盖放到魔陷区'))
@@ -219,7 +230,8 @@ export function reuseAutoIds(next: CardMove[], prev: CardMove[]): CardMove[] {
         candidate.to === item.to &&
         candidate.note === item.note,
     )
-    return old ? { ...item, id: old.id } : item
+    // 复用 id 时保留用户为这一行选过的格位
+    return old ? { ...item, id: old.id, slot: old.slot } : item
   })
 }
 

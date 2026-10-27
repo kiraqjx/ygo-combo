@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import type { CardData, CardMove, Timing, ZoneId } from '@/types'
-import { UNKNOWN_CARD, ZONE_LABELS, ZONE_ORDER } from '@/types'
+import { SLOT_COUNT, UNKNOWN_CARD, ZONE_LABELS, ZONE_ORDER } from '@/types'
 import { suggestHandtraps, uid } from '@/lib/infer'
 import { useCardStore } from '@/stores/cards'
 import { useHandtrapStore } from '@/stores/handtraps'
@@ -76,6 +76,13 @@ function suggest(move: CardMove) {
   move.handtraps = suggestHandtraps(move, { operation: props.operation, from: props.from })
 }
 
+/** 0 = 不指定，自动顺排到第一个空位 */
+function setSlot(move: CardMove, raw: string) {
+  const slot = Number(raw)
+  if (slot > 0) move.slot = slot
+  else delete move.slot
+}
+
 const toneStyle = (id: string) => {
   const tone = ht.map[id]?.tone || '#9ea7b3'
   return { color: tone, borderColor: `${tone}55`, background: `${tone}14` }
@@ -128,6 +135,17 @@ const toneStyle = (id: string) => {
         <span class="mute">→</span>
         <select v-model="move.to" class="select" style="width: 88px">
           <option v-for="zone in ZONE_ORDER" :key="zone" :value="zone">{{ ZONE_LABELS[zone] }}</option>
+        </select>
+        <select
+          v-if="move.to === 'field' || move.to === 'st'"
+          class="select"
+          style="width: 82px"
+          :title="move.to === 'field' ? '放到怪兽区几号位' : '放到魔陷区几号位'"
+          :value="move.slot || 0"
+          @change="setSlot(move, ($event.target as HTMLSelectElement).value)"
+        >
+          <option :value="0">格位自动</option>
+          <option v-for="n in SLOT_COUNT" :key="n" :value="n">{{ n }} 号位</option>
         </select>
         <input v-model.number="move.count" type="number" min="1" max="10" class="input" style="width: 56px" />
         <button class="icon-btn" title="删除这一段" @click="remove(move.id)">✕</button>

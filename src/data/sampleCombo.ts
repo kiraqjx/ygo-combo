@@ -1,0 +1,280 @@
+import type { Combo } from '@/types'
+
+/**
+ * 内置示例展开：内容来自用户导出的 combo JSON。
+ * 需要改动示例时，直接在工坊里编辑好再导出，把 JSON 贴回这里即可。
+ */
+export const SAMPLE_COMBO_ID = '81mfvlhb'
+
+const SAMPLE_COMBO: Combo = {
+  id: SAMPLE_COMBO_ID,
+  name: '新的展开',
+  deckName: '',
+  handSize: 5,
+  goal: '',
+  opening: [
+    { id: 97462632, name: '栗球兽卫' },
+    { id: 80845034, name: '“罪宝狩猎之恶魔”' },
+  ],
+  deck: [],
+  timings: [
+    {
+      id: 'p167xs01',
+      operation: 'activateEffect',
+      cardName: '栗球兽卫',
+      from: 'hand',
+      cardId: 97462632,
+      setup: [],
+      cost: [
+        {
+          id: 'm3ffe42s',
+          cardName: '栗球兽卫',
+          from: 'hand',
+          to: 'gy',
+          phase: 'cost',
+          handtraps: [],
+          note: '',
+          unknown: false,
+        },
+      ],
+      effect: [
+        {
+          id: 'n9xh7t05',
+          cardName: '两颗心灵',
+          from: 'deck',
+          to: 'st',
+          phase: 'effect',
+          handtraps: [],
+          note: '',
+          unknown: false,
+        },
+      ],
+      settle: [],
+      chains: [
+        {
+          id: 'uda0wcw0',
+          link: 2,
+          cardName: '“罪宝狩猎之恶魔”',
+          from: 'hand',
+          cardId: 80845034,
+          negates: false,
+          setup: [
+            {
+              id: 'hlcgvdeq',
+              cardName: '“罪宝狩猎之恶魔”',
+              from: 'hand',
+              to: 'st',
+              phase: 'auto',
+              note: '发动时置入魔陷区',
+              auto: true,
+            },
+          ],
+          cost: [],
+          effect: [
+            {
+              id: 'i2nksfmv',
+              cardName: '黑魔女 迪亚贝尔斯塔尔',
+              from: 'deck',
+              to: 'hand',
+              phase: 'effect',
+              handtraps: ['ash'],
+              note: '',
+              unknown: false,
+            },
+          ],
+          settle: [
+            {
+              id: 'jfy2elr7',
+              cardName: '“罪宝狩猎之恶魔”',
+              from: 'st',
+              to: 'gy',
+              phase: 'auto',
+              note: '结算后送去墓地',
+              auto: true,
+            },
+          ],
+          note: '',
+        },
+      ],
+      handtraps: [],
+      note: '',
+    },
+    {
+      id: 'l6f0zi98',
+      operation: 'activateEffect',
+      cardName: '两颗心灵',
+      from: 'st',
+      cardId: 24749710,
+      setup: [],
+      cost: [],
+      effect: [
+        {
+          id: '0aodonzh',
+          cardName: '混沌之魔王-骸骨恶魔',
+          from: 'deck',
+          to: 'hand',
+          phase: 'effect',
+          handtraps: [],
+          note: '',
+        },
+        {
+          id: '9gmhdi8m',
+          cardName: '混沌之魔王-骸骨恶魔',
+          from: 'hand',
+          to: 'gy',
+          phase: 'effect',
+          handtraps: [],
+          note: '',
+        },
+      ],
+      settle: [],
+      chains: [],
+      handtraps: ['ash'],
+      note: '',
+    },
+    {
+      id: 'dy6rq4bz',
+      operation: 'activateEffect',
+      cardName: '混沌之魔王-骸骨恶魔',
+      from: 'gy',
+      cardId: 24088928,
+      setup: [],
+      cost: [
+        {
+          id: 'p8ecdzv0',
+          cardName: '光与暗的仪式',
+          from: 'deck',
+          to: 'gy',
+          phase: 'cost',
+          handtraps: [],
+          note: '',
+        },
+      ],
+      effect: [
+        {
+          id: 'eefxkk52',
+          cardName: '黑色混沌之魔术师 黑混沌',
+          from: 'deck',
+          to: 'hand',
+          phase: 'effect',
+          note: '从卡组加入手卡',
+          handtraps: ['ash', 'droll'],
+        },
+      ],
+      settle: [],
+      chains: [],
+      handtraps: ['ash', 'droll'],
+      note: '',
+    },
+    {
+      id: '33jch1ig',
+      operation: 'activate',
+      cardName: '光与暗的仪式',
+      from: 'gy',
+      cardId: 33599853,
+      setup: [],
+      cost: [],
+      effect: [
+        {
+          id: 'sp312e7d',
+          cardName: '光与暗的仪式',
+          from: 'gy',
+          to: 'hand',
+          phase: 'effect',
+          handtraps: ['belle'],
+          note: '',
+          unknown: false,
+        },
+        {
+          id: '2geg3up8',
+          cardName: '混沌之魔王-骸骨恶魔',
+          from: 'gy',
+          to: 'hand',
+          phase: 'effect',
+          handtraps: [],
+          note: '',
+          unknown: false,
+        },
+      ],
+      settle: [],
+      chains: [],
+      handtraps: [],
+      note: '',
+      manualLinks: [
+        {
+          id: 'le0gvkea',
+          fromTimingId: 'dy6rq4bz',
+          fromMoveId: 'p8ecdzv0',
+        },
+      ],
+    },
+    {
+      id: 'us6mbmom',
+      operation: 'activate',
+      cardName: '光与暗的仪式',
+      from: 'hand',
+      cardId: 33599853,
+      setup: [
+        {
+          id: '6tx2g60m',
+          cardName: '光与暗的仪式',
+          from: 'hand',
+          to: 'st',
+          phase: 'auto',
+          note: '发动时置入魔陷区',
+          auto: true,
+        },
+      ],
+      cost: [],
+      effect: [
+        {
+          id: 'owlyrme1',
+          cardName: '黑色混沌之魔术师 黑混沌',
+          from: 'hand',
+          to: 'field',
+          phase: 'effect',
+          handtraps: [],
+          note: '',
+          unknown: false,
+        },
+        {
+          id: 'rtic97dr',
+          cardName: '栗球兽卫',
+          from: 'gy',
+          to: 'banish',
+          phase: 'effect',
+          handtraps: [],
+          note: '',
+          unknown: false,
+        },
+      ],
+      settle: [
+        {
+          id: 'keetr6t9',
+          cardName: '光与暗的仪式',
+          from: 'st',
+          to: 'gy',
+          phase: 'auto',
+          note: '结算后送去墓地',
+          auto: true,
+        },
+      ],
+      chains: [],
+      handtraps: [],
+      note: '',
+      manualLinks: [
+        {
+          id: 'yo8mmr24',
+          fromTimingId: '33jch1ig',
+          fromMoveId: 'sp312e7d',
+        },
+      ],
+    },
+  ],
+  updatedAt: 1793080253654,
+}
+
+/** 每次返回一份副本，避免示例数据被编辑污染 */
+export function createSampleCombo(): Combo {
+  return JSON.parse(JSON.stringify(SAMPLE_COMBO)) as Combo
+}

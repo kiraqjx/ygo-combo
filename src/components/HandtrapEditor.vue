@@ -118,20 +118,6 @@ function reset() {
             </div>
           </div>
 
-          <div class="field" style="margin-top: 10px">
-            <label>简述</label>
-            <input v-model="editing.summary" class="input" placeholder="一句话说明它能做什么" />
-          </div>
-
-          <div class="field" style="margin-top: 10px">
-            <label>判定说明</label>
-            <textarea
-              v-model="editing.rule"
-              class="textarea"
-              placeholder="推演时怎么判断：命中哪些段落、是否断链"
-            />
-          </div>
-
           <div class="row" style="gap: 8px; margin-top: 12px">
             <button class="btn ghost sm" @click="cancel">返回列表</button>
             <span class="grow" />

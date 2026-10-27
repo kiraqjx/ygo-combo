@@ -44,7 +44,7 @@ onMounted(() => {
         </span>
         <span>
           决斗推演室
-          <small>YGO INFER</small>
+          <small>YGO COMBO</small>
         </span>
       </RouterLink>
 

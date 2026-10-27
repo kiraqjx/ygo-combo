@@ -158,9 +158,6 @@ function deleteCombo() {
       />
       <span v-if="combo" class="chip plain">{{ combo.timings.length }} 时序</span>
       <span v-if="analysis" class="chip plain">{{ analysis.links.length }} 链路</span>
-      <span v-if="analysis" class="chip plain">
-        {{ analysis.reports.filter((report) => report.sites.length > 0).length }} 处吃手坑
-      </span>
 
       <span class="grow" />
 

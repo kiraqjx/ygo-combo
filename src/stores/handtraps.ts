@@ -94,8 +94,6 @@ export const useHandtrapStore = defineStore('handtraps', () => {
       name: '',
       category: 'negate',
       tone: '#ff6a69',
-      summary: '',
-      rule: '',
     }
   }
 

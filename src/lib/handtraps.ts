@@ -9,8 +9,6 @@ export interface HandtrapDef {
   cardId?: number
   category: TrapCategory
   tone: string
-  summary: string
-  rule: string
   counting?: Counting
 }
 
@@ -23,8 +21,6 @@ export const BUILTIN_HANDTRAPS: HandtrapDef[] = [
     cardId: 23434538,
     category: 'draw',
     tone: '#26cd4d',
-    summary: '每次对方把怪兽特殊召唤，自己抽 1 张。',
-    rule: '对方每次特殊召唤（不论从何处）抽 1 张，通常召唤不计数。',
     counting: 'all',
   },
   {
@@ -34,8 +30,6 @@ export const BUILTIN_HANDTRAPS: HandtrapDef[] = [
     cardId: 42141493,
     category: 'draw',
     tone: '#71b7ff',
-    summary: '每次对方从卡组·额外卡组特召怪兽，自己抽 1 张。',
-    rule: '只统计「从卡组 / 额外卡组」的特殊召唤；从手卡、墓地、除外区的特召不计数。',
     counting: 'deckExtra',
   },
   {
@@ -45,8 +39,6 @@ export const BUILTIN_HANDTRAPS: HandtrapDef[] = [
     cardId: 84192580,
     category: 'draw',
     tone: '#7ea8ff',
-    summary: '每次对方从手卡把怪兽召唤·特召，自己抽 1 张。',
-    rule: '只统计「从手卡」的召唤与特殊召唤；场上、墓地、卡组来源不计数。',
     counting: 'hand',
   },
   {
@@ -56,8 +48,6 @@ export const BUILTIN_HANDTRAPS: HandtrapDef[] = [
     cardId: 87126721,
     category: 'draw',
     tone: '#a371f7',
-    summary: '每次对方从墓地·除外状态特召怪兽，自己抽 1 张。',
-    rule: '只统计「从墓地 / 除外区」的特殊召唤。',
     counting: 'gyBanish',
   },
   {
@@ -67,8 +57,6 @@ export const BUILTIN_HANDTRAPS: HandtrapDef[] = [
     cardId: 94145021,
     category: 'lock',
     tone: '#ff9b57',
-    summary: '对方从卡组加入手卡后，本回合双方不能从卡组把卡加入手卡。',
-    rule: '检索（卡组→手卡）被全面封锁，依赖检索的后续步骤会连锁失效。',
   },
   {
     id: 'ash',
@@ -77,8 +65,6 @@ export const BUILTIN_HANDTRAPS: HandtrapDef[] = [
     cardId: 14558127,
     category: 'negate',
     tone: '#ff6a69',
-    summary: '无效「卡组加手 / 卡组特召 / 卡组送墓」的效果。',
-    rule: '可无效一次包含「从卡组加入手卡」「从卡组特殊召唤」「从卡组送去墓地」的效果。',
   },
   {
     id: 'veiler',
@@ -87,8 +73,6 @@ export const BUILTIN_HANDTRAPS: HandtrapDef[] = [
     cardId: 97268402,
     category: 'negate',
     tone: '#f0b72f',
-    summary: '无效场上 1 只效果怪兽的效果。',
-    rule: '只能指定场上表侧表示的效果怪兽，怪兽本身留在场上。',
   },
   {
     id: 'imperm',
@@ -97,8 +81,6 @@ export const BUILTIN_HANDTRAPS: HandtrapDef[] = [
     cardId: 10045474,
     category: 'negate',
     tone: '#ff7bd5',
-    summary: '无效场上 1 只表侧怪兽的效果（自己场上无卡时可手发）。',
-    rule: '等同于遮蒙，但陷阱卡不能被「灰流丽」无效。',
   },
   {
     id: 'nibiru',
@@ -107,8 +89,6 @@ export const BUILTIN_HANDTRAPS: HandtrapDef[] = [
     cardId: 27204311,
     category: 'nuke',
     tone: '#ff8f6b',
-    summary: '对方第 5 次以上召唤·特召后，解放双方场上怪兽。',
-    rule: '累计召唤·特殊召唤 5 只以上后，场上表侧怪兽被全部解放，需要能空场重建。',
   },
   {
     id: 'shifter',
@@ -117,8 +97,6 @@ export const BUILTIN_HANDTRAPS: HandtrapDef[] = [
     cardId: 91800273,
     category: 'zone',
     tone: '#9ea7b3',
-    summary: '送去墓地的卡改为除外，墓地资源本回合不可用。',
-    rule: '依赖墓地取牌、墓地特召的步骤会失效。',
   },
   {
     id: 'belle',
@@ -127,8 +105,6 @@ export const BUILTIN_HANDTRAPS: HandtrapDef[] = [
     cardId: 73642296,
     category: 'negate',
     tone: '#56d364',
-    summary: '无效「墓地加手 / 墓地特召 / 墓地除外」的效果。',
-    rule: '只针对与墓地互动的效果，可无效一次。',
   },
   {
     id: 'ogre',
@@ -137,8 +113,6 @@ export const BUILTIN_HANDTRAPS: HandtrapDef[] = [
     cardId: 59438930,
     category: 'negate',
     tone: '#39c5cf',
-    summary: '破坏发动效果的场上的卡。',
-    rule: '场上的怪兽 / 已表侧表示的魔陷发动效果时，破坏那张卡。',
   },
 ]
 

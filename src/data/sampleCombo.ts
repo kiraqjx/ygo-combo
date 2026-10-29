@@ -1,4 +1,4 @@
-import type { Combo } from '@/types'
+import type { Combo, ComboLine } from '@/types'
 
 /**
  * 内置示例展开：内容来自用户导出的 combo JSON。
@@ -6,9 +6,9 @@ import type { Combo } from '@/types'
  */
 export const SAMPLE_COMBO_ID = '81mfvlhb'
 
-const SAMPLE_COMBO: Combo = {
-  id: SAMPLE_COMBO_ID,
-  name: '新的展开',
+const SAMPLE_LINE: ComboLine = {
+  id: 'sample-line',
+  name: '栗球兽卫开',
   deckName: '',
   handSize: 5,
   goal: '',
@@ -271,6 +271,13 @@ const SAMPLE_COMBO: Combo = {
       ],
     },
   ],
+}
+
+const SAMPLE_COMBO: Combo = {
+  id: SAMPLE_COMBO_ID,
+  name: '光与暗之仪式',
+  lines: [SAMPLE_LINE],
+  activeLineId: SAMPLE_LINE.id,
   updatedAt: 1793080253654,
 }
 

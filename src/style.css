@@ -1927,6 +1927,18 @@ textarea {
   gap: 8px;
 }
 
+/* 展开链切换条：与工具栏同一节奏，但弱化背景 */
+.line-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-2);
+}
+
 .lab-stage {
   flex: 1;
   min-height: 0;

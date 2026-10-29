@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import type { CardData } from '@/types'
+import type { CardData, ComboLine } from '@/types'
 import { useComboStore } from '@/stores/combos'
 import { cardImageUrl } from '@/lib/cardDb'
 import CardPicker from './CardPicker.vue'
 
+const props = defineProps<{ line: ComboLine }>()
+
 const store = useComboStore()
-const combo = computed(() => store.current)
+const combo = computed(() => props.line)
 
 const picker = ref<'deck' | 'opening' | null>(null)
 

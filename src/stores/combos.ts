@@ -4,6 +4,7 @@ import type {
   CardMove,
   ChainEntry,
   Combo,
+  ComboLine,
   DeckEntry,
   OpeningCard,
   OperationKind,
@@ -11,12 +12,13 @@ import type {
   ZoneId,
 } from '@/types'
 import { uid } from '@/lib/infer'
-import { SAMPLE_COMBO_ID, createSampleCombo } from '@/data/sampleCombo'
+import { createSampleCombo } from '@/data/sampleCombo'
 
 const STORAGE_KEY = 'ygo-infer-combos-v2'
 const LEGACY_KEY = 'ygo-infer-combos-v1'
+const MAIN_LINE = '主线'
 
-function blankCombo(name = '未命名展开'): Combo {
+function blankLine(name = MAIN_LINE): ComboLine {
   return {
     id: uid(),
     name,
@@ -26,6 +28,16 @@ function blankCombo(name = '未命名展开'): Combo {
     opening: [],
     deck: [],
     timings: [],
+  }
+}
+
+function blankCombo(name = '未命名展开'): Combo {
+  const line = blankLine()
+  return {
+    id: uid(),
+    name,
+    lines: [line],
+    activeLineId: line.id,
     updatedAt: Date.now(),
   }
 }
@@ -195,22 +207,62 @@ function migrateLegacy(raw: Record<string, unknown>): Combo | null {
   }
 
   if (!timings.length) return null
-  return {
-    id: String(raw.id || uid()),
-    name: String(raw.name || '导入的展开'),
+  const line: ComboLine = {
+    id: uid(),
+    name: MAIN_LINE,
     deckName: String(raw.deckName || ''),
     handSize: Number(raw.handSize || 5),
     goal: String(raw.goal || ''),
     opening: (raw.opening as OpeningCard[]) || [],
     deck: (raw.deck as DeckEntry[]) || [],
     timings,
+  }
+  return {
+    id: String(raw.id || uid()),
+    name: String(raw.name || '导入的展开'),
+    lines: [line],
+    activeLineId: line.id,
     updatedAt: Date.now(),
   }
 }
 
 /* ------------------------------------------------------------------ */
-/* 副本                                                                 */
+/* 归一化 / 副本                                                        */
 /* ------------------------------------------------------------------ */
+
+function normalizeLine(raw: Record<string, unknown>, fallbackName = MAIN_LINE): ComboLine {
+  return {
+    id: String(raw.id || uid()),
+    name: String(raw.name || fallbackName),
+    deckName: String(raw.deckName || ''),
+    handSize: Number(raw.handSize || 5),
+    goal: String(raw.goal || ''),
+    opening: (raw.opening as OpeningCard[]) || [],
+    deck: (raw.deck as DeckEntry[]) || [],
+    timings: ((raw.timings as Timing[]) || []).map(normalizeTiming),
+  }
+}
+
+/** 兼容三种结构：新版（lines）、旧版（timings 在顶层）、更旧的 steps */
+function normalizeCombo(raw: Record<string, unknown>): Combo | null {
+  const rawLines = Array.isArray(raw.lines) ? (raw.lines as Record<string, unknown>[]) : []
+  let lines = rawLines.map((item, index) =>
+    normalizeLine(item, index === 0 ? MAIN_LINE : `展开链 ${index + 1}`),
+  )
+  if (!lines.length && Array.isArray(raw.timings)) lines = [normalizeLine(raw)]
+  if (!lines.length) return migrateLegacy(raw)
+
+  const activeLineId = lines.some((line) => line.id === raw.activeLineId)
+    ? String(raw.activeLineId)
+    : lines[0].id
+  return {
+    id: String(raw.id || uid()),
+    name: String(raw.name || '导入的展开'),
+    lines,
+    activeLineId,
+    updatedAt: Number(raw.updatedAt || Date.now()),
+  }
+}
 
 function cloneTiming(timing: Timing): Timing {
   const copyMove = (move: CardMove): CardMove => ({ ...move, id: uid() })
@@ -233,6 +285,63 @@ function cloneTiming(timing: Timing): Timing {
   }
 }
 
+/** 整条展开链的副本：时序 / 移动换新 id，手动连线重映射到新 id */
+function cloneTimings(timings: Timing[]): Timing[] {
+  const timingIds = new Map<string, string>()
+  const moveIds = new Map<string, string>()
+
+  const copyMove = (move: CardMove): CardMove => {
+    const id = uid()
+    moveIds.set(move.id, id)
+    return { ...move, id }
+  }
+
+  const copies = timings.map((timing) => {
+    const id = uid()
+    timingIds.set(timing.id, id)
+    return {
+      ...timing,
+      id,
+      setup: (timing.setup || []).map(copyMove),
+      cost: timing.cost.map(copyMove),
+      effect: timing.effect.map(copyMove),
+      settle: (timing.settle || []).map(copyMove),
+      manualLinks: [] as Timing['manualLinks'],
+      chains: timing.chains.map((chain) => ({
+        ...chain,
+        id: uid(),
+        setup: (chain.setup || []).map(copyMove),
+        cost: (chain.cost || []).map(copyMove),
+        effect: (chain.effect || []).map(copyMove),
+        settle: (chain.settle || []).map(copyMove),
+      })),
+    }
+  })
+
+  // id 映射建好后再补手动连线
+  copies.forEach((timing, index) => {
+    timing.manualLinks = (timings[index].manualLinks || []).map((link) => ({
+      ...link,
+      id: uid(),
+      fromTimingId: timingIds.get(link.fromTimingId) || link.fromTimingId,
+      fromMoveId: moveIds.get(link.fromMoveId) || link.fromMoveId,
+    }))
+  })
+
+  return copies
+}
+
+function cloneLine(line: ComboLine, name?: string): ComboLine {
+  return {
+    ...line,
+    id: uid(),
+    name: name || `${line.name} 副本`,
+    opening: line.opening.map((card) => ({ ...card })),
+    deck: line.deck.map((entry) => ({ ...entry })),
+    timings: cloneTimings(line.timings),
+  }
+}
+
 /* ------------------------------------------------------------------ */
 
 export const useComboStore = defineStore('combos', () => {
@@ -241,6 +350,13 @@ export const useComboStore = defineStore('combos', () => {
   const loaded = ref(false)
 
   const current = computed(() => combos.value.find((c) => c.id === currentId.value) || null)
+
+  /** 当前选中的展开链 */
+  const line = computed(() => {
+    const combo = current.value
+    if (!combo) return null
+    return combo.lines.find((item) => item.id === combo.activeLineId) || combo.lines[0] || null
+  })
 
   function readJson(key: string): unknown {
     try {
@@ -257,12 +373,14 @@ export const useComboStore = defineStore('combos', () => {
 
     const stored = readJson(STORAGE_KEY)
     if (Array.isArray(stored) && stored.length) {
-      combos.value = (stored as Combo[]).map((combo) => ({
-        ...combo,
-        timings: (combo.timings || []).map(normalizeTiming),
-      }))
-      currentId.value = combos.value[0].id
-      return
+      const prepared = (stored as Record<string, unknown>[])
+        .map((item) => normalizeCombo(item))
+        .filter((item): item is Combo => Boolean(item))
+      if (prepared.length) {
+        combos.value = prepared
+        currentId.value = prepared[0].id
+        return
+      }
     }
 
     // 旧版数据：尽量迁移，迁移不了就退回示例
@@ -308,11 +426,12 @@ export const useComboStore = defineStore('combos', () => {
   function duplicate(id: string) {
     const source = combos.value.find((combo) => combo.id === id)
     if (!source) return
+    const lines = source.lines.map((item) => cloneLine(item, item.name))
     const copy: Combo = {
-      ...JSON.parse(JSON.stringify(source)),
       id: uid(),
       name: `${source.name} 副本`,
-      timings: source.timings.map(cloneTiming),
+      lines,
+      activeLineId: lines[0]?.id || '',
       updatedAt: Date.now(),
     }
     combos.value.unshift(copy)
@@ -324,39 +443,16 @@ export const useComboStore = defineStore('combos', () => {
     if (index < 0) return
     combos.value.splice(index, 1)
     if (currentId.value === id) currentId.value = combos.value[0]?.id || ''
-    if (!combos.value.length) {
-      const sample = createSampleCombo()
-      combos.value.push(sample)
-      currentId.value = sample.id
-    }
-  }
-
-  function restoreDemo() {
-    const existing = combos.value.find((combo) => combo.id === SAMPLE_COMBO_ID)
-    if (existing) {
-      currentId.value = existing.id
-      return existing
-    }
-    const sample = createSampleCombo()
-    combos.value.unshift(sample)
-    currentId.value = sample.id
-    return sample
   }
 
   function importCombo(json: string) {
     const data = JSON.parse(json) as unknown
     const list = Array.isArray(data) ? data : [data]
     const prepared = list
-      .map((item) => {
-        const raw = item as Record<string, unknown>
-        if (Array.isArray(raw.timings)) {
-          const combo = raw as unknown as Combo
-          return { ...blankCombo(combo.name), ...combo, id: uid(), updatedAt: Date.now() }
-        }
-        return migrateLegacy(raw)
-      })
+      .map((item) => normalizeCombo(item as Record<string, unknown>))
       .filter((item): item is Combo => Boolean(item))
-    if (!prepared.length) throw new Error('无法识别的数据格式（需要 timings 或旧版 steps）')
+      .map((combo) => ({ ...combo, id: uid(), updatedAt: Date.now() }))
+    if (!prepared.length) throw new Error('无法识别的数据格式（需要 lines / timings 或旧版 steps）')
     combos.value.unshift(...prepared)
     currentId.value = prepared[0].id
   }
@@ -365,31 +461,76 @@ export const useComboStore = defineStore('combos', () => {
     if (current.value) current.value.updatedAt = Date.now()
   }
 
+  /* ---- 展开链 ---- */
+
+  function selectLine(id: string) {
+    const combo = current.value
+    if (combo && combo.lines.some((item) => item.id === id)) combo.activeLineId = id
+  }
+
+  function addLine(name?: string, copyFrom?: ComboLine | null) {
+    const combo = current.value
+    if (!combo) return null
+    const next = copyFrom
+      ? cloneLine(copyFrom, name || `${copyFrom.name} 副本`)
+      : blankLine(name || `展开链 ${combo.lines.length + 1}`)
+    combo.lines.push(next)
+    combo.activeLineId = next.id
+    touch()
+    return next
+  }
+
+  function duplicateLine(id: string) {
+    const combo = current.value
+    const source = combo?.lines.find((item) => item.id === id)
+    if (!combo || !source) return
+    addLine(undefined, source)
+  }
+
+  function removeLine(id: string) {
+    const combo = current.value
+    if (!combo) return
+    const index = combo.lines.findIndex((item) => item.id === id)
+    if (index < 0) return
+    combo.lines.splice(index, 1)
+    if (!combo.lines.length) combo.lines.push(blankLine())
+    if (!combo.lines.some((item) => item.id === combo.activeLineId)) {
+      combo.activeLineId = combo.lines[Math.min(index, combo.lines.length - 1)].id
+    }
+    touch()
+  }
+
+  function patchLine(patch: Partial<ComboLine>) {
+    if (!line.value) return
+    Object.assign(line.value, patch)
+    touch()
+  }
+
   /* ---- 时序 ---- */
 
   function addTiming(timing: Timing, afterTimingId?: string) {
-    const combo = current.value
-    if (!combo) return
-    const index = afterTimingId ? combo.timings.findIndex((item) => item.id === afterTimingId) : -1
-    if (index >= 0) combo.timings.splice(index + 1, 0, timing)
-    else combo.timings.push(timing)
+    const target = line.value
+    if (!target) return
+    const index = afterTimingId ? target.timings.findIndex((item) => item.id === afterTimingId) : -1
+    if (index >= 0) target.timings.splice(index + 1, 0, timing)
+    else target.timings.push(timing)
     touch()
   }
 
   function updateTiming(timing: Timing) {
-    const combo = current.value
-    if (!combo) return
-    const index = combo.timings.findIndex((item) => item.id === timing.id)
-    if (index >= 0) combo.timings.splice(index, 1, timing)
+    const target = line.value
+    if (!target) return
+    const index = target.timings.findIndex((item) => item.id === timing.id)
+    if (index >= 0) target.timings.splice(index, 1, timing)
     touch()
   }
 
   function removeTiming(id: string) {
-    const combo = current.value
-    if (!combo) return
-    combo.timings = combo.timings.filter((timing) => timing.id !== id)
+    const target = line.value
+    if (!target) return
+    target.timings = target.timings.filter((timing) => timing.id !== id)
     // 清掉指向它的手动连线
-    for (const timing of combo.timings) {
+    for (const timing of target.timings) {
       if (timing.manualLinks?.length) {
         timing.manualLinks = timing.manualLinks.filter((link) => link.fromTimingId !== id)
       }
@@ -398,22 +539,22 @@ export const useComboStore = defineStore('combos', () => {
   }
 
   function moveTiming(id: string, dir: -1 | 1) {
-    const combo = current.value
-    if (!combo) return
-    const index = combo.timings.findIndex((timing) => timing.id === id)
+    const target = line.value
+    if (!target) return
+    const index = target.timings.findIndex((timing) => timing.id === id)
     const next = index + dir
-    if (index < 0 || next < 0 || next >= combo.timings.length) return
-    const [item] = combo.timings.splice(index, 1)
-    combo.timings.splice(next, 0, item)
+    if (index < 0 || next < 0 || next >= target.timings.length) return
+    const [item] = target.timings.splice(index, 1)
+    target.timings.splice(next, 0, item)
     touch()
   }
 
   function duplicateTiming(id: string) {
-    const combo = current.value
-    if (!combo) return
-    const index = combo.timings.findIndex((timing) => timing.id === id)
+    const target = line.value
+    if (!target) return
+    const index = target.timings.findIndex((timing) => timing.id === id)
     if (index < 0) return
-    combo.timings.splice(index + 1, 0, cloneTiming(combo.timings[index]))
+    target.timings.splice(index + 1, 0, cloneTiming(target.timings[index]))
     touch()
   }
 
@@ -424,7 +565,7 @@ export const useComboStore = defineStore('combos', () => {
   }
 
   function saveChain(timingId: string, chain: ChainEntry) {
-    const timing = current.value?.timings.find((item) => item.id === timingId)
+    const timing = line.value?.timings.find((item) => item.id === timingId)
     if (!timing) return
     const index = timing.chains.findIndex((item) => item.id === chain.id)
     if (index >= 0) timing.chains.splice(index, 1, chain)
@@ -434,7 +575,7 @@ export const useComboStore = defineStore('combos', () => {
   }
 
   function removeChain(timingId: string, chainId: string) {
-    const timing = current.value?.timings.find((item) => item.id === timingId)
+    const timing = line.value?.timings.find((item) => item.id === timingId)
     if (!timing) return
     timing.chains = timing.chains.filter((item) => item.id !== chainId)
     normalizeChains(timing)
@@ -444,40 +585,40 @@ export const useComboStore = defineStore('combos', () => {
   /* ---- 卡组 / 起手 ---- */
 
   function addDeckCard(id: number, name: string) {
-    const combo = current.value
-    if (!combo) return
-    const entry = combo.deck.find((item) => item.id === id)
+    const target = line.value
+    if (!target) return
+    const entry = target.deck.find((item) => item.id === id)
     if (entry) entry.count = Math.min(3, entry.count + 1)
-    else combo.deck.push({ id, name, count: 1 })
+    else target.deck.push({ id, name, count: 1 })
     touch()
   }
 
   function removeDeckCard(id: number) {
-    if (current.value) {
-      current.value.deck = current.value.deck.filter((item) => item.id !== id)
+    if (line.value) {
+      line.value.deck = line.value.deck.filter((item) => item.id !== id)
       touch()
     }
   }
 
   function setDeck(deck: DeckEntry[]) {
-    if (current.value) {
-      current.value.deck = deck
+    if (line.value) {
+      line.value.deck = deck
       touch()
     }
   }
 
   function addOpening(card: OpeningCard) {
-    const combo = current.value
-    if (!combo) return
-    if (combo.opening.length >= combo.handSize) return
-    if (combo.opening.some((item) => item.id === card.id)) return
-    combo.opening.push(card)
+    const target = line.value
+    if (!target) return
+    if (target.opening.length >= target.handSize) return
+    if (target.opening.some((item) => item.id === card.id)) return
+    target.opening.push(card)
     touch()
   }
 
   function removeOpening(id: number) {
-    if (current.value) {
-      current.value.opening = current.value.opening.filter((item) => item.id !== id)
+    if (line.value) {
+      line.value.opening = line.value.opening.filter((item) => item.id !== id)
       touch()
     }
   }
@@ -492,14 +633,19 @@ export const useComboStore = defineStore('combos', () => {
     combos,
     currentId,
     current,
+    line,
     loaded,
     load,
     select,
     create,
     duplicate,
     remove,
-    restoreDemo,
     importCombo,
+    selectLine,
+    addLine,
+    duplicateLine,
+    removeLine,
+    patchLine,
     addTiming,
     updateTiming,
     removeTiming,

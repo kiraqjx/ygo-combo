@@ -126,7 +126,7 @@ interface UpstreamOption {
 }
 
 const upstreamOptions = computed<UpstreamOption[]>(() => {
-  const timings = comboStore.current?.timings || []
+  const timings = comboStore.line?.timings || []
   const selfIndex = timings.findIndex((item) => item.id === draft.value.id)
   const scope = selfIndex < 0 ? timings : timings.slice(0, selfIndex)
   const out: UpstreamOption[] = []

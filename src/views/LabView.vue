@@ -7,6 +7,7 @@ import { analyzeCombo } from '@/lib/timeline'
 import { downloadJson, toast } from '@/lib/toast'
 import DuelPlayback from '@/components/DuelPlayback.vue'
 import HandtrapEditor from '@/components/HandtrapEditor.vue'
+import ComboCards from '@/components/ComboCards.vue'
 import TimingTimeline from '@/components/TimingTimeline.vue'
 import ResistancePanel from '@/components/ResistancePanel.vue'
 import DeckSidebar from '@/components/DeckSidebar.vue'
@@ -18,6 +19,7 @@ const htStore = useHandtrapStore()
 store.load()
 
 const combo = computed(() => store.current)
+const line = computed(() => store.line)
 const activeTrapId = ref('maxx')
 const selectedTimingId = ref<string | null>(null)
 const interrupts = ref<Interrupt[]>([])
@@ -27,23 +29,25 @@ const chainEditor = ref<{ timingId: string; chain: ChainEntry | null; link: numb
 const deckDrawer = ref(false)
 const importModal = ref(false)
 const handtrapModal = ref(false)
+const cardsModal = ref(false)
 const playback = ref(false)
 const importText = ref('')
 
 const analysis = computed(() => {
   // 手坑配置变了也要重算：读取 version 建立依赖
   htStore.version
-  const current = store.current
-  if (!current) return null
-  return analyzeCombo(current, interrupts.value)
+  const target = store.line
+  if (!target) return null
+  return analyzeCombo(target, interrupts.value)
 })
 
 const applied = computed(
   () => interrupts.value.find((item) => item.handtrapId === activeTrapId.value) || null,
 )
 
+// 切换展开 / 展开链时，注入的手坑与选中态都归零
 watch(
-  () => store.currentId,
+  () => `${store.currentId}:${store.line?.id || ''}`,
   () => {
     interrupts.value = []
     selectedTimingId.value = null
@@ -135,7 +139,7 @@ async function onFile(event: Event) {
 }
 
 function newCombo() {
-  store.create('新的展开')
+  store.create('光与暗之仪式')
   toast('已创建空白展开')
 }
 
@@ -144,55 +148,85 @@ function deleteCombo() {
   store.remove(combo.value.id)
   toast('已删除')
 }
+
+function newLine() {
+  store.addLine()
+  toast('已新建展开链')
+}
+
+function duplicateLine() {
+  if (!line.value) return
+  store.duplicateLine(line.value.id)
+  toast('已复制展开链')
+}
+
+function deleteLine() {
+  if (!combo.value || !line.value) return
+  if (combo.value.lines.length <= 1) {
+    toast('至少要保留一条展开链', true)
+    return
+  }
+  store.removeLine(line.value.id)
+  toast('已删除展开链')
+}
 </script>
 
 <template>
   <div class="lab-screen">
     <div class="lab-toolbar">
-      <input
-        v-if="combo"
-        v-model="combo.name"
-        class="combo-title-input"
-        placeholder="展开名称"
-        aria-label="展开名称"
-      />
-      <span v-if="combo" class="chip plain">{{ combo.timings.length }} 时序</span>
+      <input v-if="combo" v-model="combo.name" class="combo-title-input" placeholder="展开名称" aria-label="展开名称" />
+      <span v-if="line" class="chip plain">{{ line.timings.length }} 时序</span>
       <span v-if="analysis" class="chip plain">{{ analysis.links.length }} 链路</span>
 
       <span class="grow" />
 
-      <select
-        class="select"
-        style="width: 200px"
-        :value="store.currentId"
-        @change="store.select(($event.target as HTMLSelectElement).value)"
-      >
+      <select class="select" style="width: 180px" :value="store.currentId"
+        @change="store.select(($event.target as HTMLSelectElement).value)">
         <option v-for="item in store.combos" :key="item.id" :value="item.id">{{ item.name }}</option>
       </select>
+      <button class="btn sm" @click="newCombo">新建</button>
+      <button class="btn sm ghost" :disabled="!combo" @click="store.duplicate(store.currentId)">复制</button>
+      <button class="btn sm ghost danger" :disabled="!combo" @click="deleteCombo">删除</button>
+      <button class="btn sm ghost" :disabled="!combo" @click="exportCombo">导出</button>
+      <button class="btn sm ghost" @click="importModal = true">导入</button>
+      <button class="btn sm ghost" @click="handtrapModal = true">手坑配置</button>
+      <button class="btn sm" :disabled="!combo?.lines.length" @click="cardsModal = true">卡表</button>
+    </div>
+
+    <div v-if="combo && line" class="line-bar">
+      <span class="label" style="margin: 0">展开链</span>
+      <div class="row wrap" style="gap: 6px">
+        <button v-for="item in combo.lines" :key="item.id" class="btn sm"
+          :class="{ primary: item.id === combo.activeLineId }" @click="store.selectLine(item.id)">
+          {{ item.name }}
+        </button>
+        <button class="btn sm ghost" title="新建展开链" @click="newLine">＋</button>
+      </div>
+
+      <span class="grow" />
+
+      <input v-model="line.name" class="input" style="width: 140px" placeholder="展开链名称" aria-label="展开链名称" />
       <button class="btn sm" @click="deckDrawer = true">卡组 · 起手</button>
-      <button class="btn sm" @click="handtrapModal = true">手坑配置</button>
-      <button class="btn sm" :disabled="!analysis || !combo?.timings.length" @click="playback = true">
+      <button class="btn sm" :disabled="!analysis || !line.timings.length" @click="playback = true">
         ▶ 动态演示
       </button>
-      <button class="btn sm" @click="newCombo">新建</button>
-      <button class="btn sm ghost" @click="store.duplicate(store.currentId)">复制</button>
-      <button class="btn sm ghost danger" @click="deleteCombo">删除</button>
-      <button class="btn sm ghost" @click="exportCombo">导出</button>
-      <button class="btn sm ghost" @click="importModal = true">导入</button>
-      <button class="btn sm ghost" @click="store.restoreDemo()">示例</button>
+      <button class="btn sm ghost" @click="duplicateLine">复制链</button>
+      <button class="btn sm ghost danger" :disabled="combo.lines.length <= 1" @click="deleteLine">
+        删除链
+      </button>
     </div>
 
     <div v-if="!combo" class="panel">
       <div class="empty">
         还没有展开流程。
-        <button class="btn primary sm" style="margin-left: 10px" @click="store.restoreDemo()">载入示例展开</button>
+        <button class="btn primary sm" style="margin-left: 10px" @click="newCombo">新建展开</button>
       </div>
     </div>
 
-    <div v-else-if="analysis" class="lab-stage">
+    <div v-else-if="line && analysis" class="lab-stage">
       <div class="flow-panel">
         <div class="panel-head">
-          <span class="panel-title">展开链</span>
+          <span class="panel-title">展开链 · {{ line.name }}</span>
           <div class="row" style="gap: 6px">
             <span class="chip plain">← 从左到右 →</span>
             <span class="chip plain" title="每个时序按 C1 → Cn 记录连锁">C1 → Cn</span>
@@ -200,90 +234,60 @@ function deleteCombo() {
           </div>
         </div>
         <div class="flow-panel-body">
-          <TimingTimeline
-            :timings="combo.timings"
-            :analysis="analysis"
-            :selected-id="selectedTimingId"
-            @select="(id) => (selectedTimingId = id)"
-            @add="openAdd"
-            @edit="openEdit"
-            @remove="removeTiming"
-            @move="(id, dir) => store.moveTiming(id, dir)"
-            @duplicate="(id) => store.duplicateTiming(id)"
-            @add-chain="openAddChain"
-            @edit-chain="openEditChain"
-            @remove-chain="removeChain"
-          />
+          <TimingTimeline :timings="line.timings" :analysis="analysis" :selected-id="selectedTimingId"
+            @select="(id) => (selectedTimingId = id)" @add="openAdd" @edit="openEdit" @remove="removeTiming"
+            @move="(id, dir) => store.moveTiming(id, dir)" @duplicate="(id) => store.duplicateTiming(id)"
+            @add-chain="openAddChain" @edit-chain="openEditChain" @remove-chain="removeChain" />
         </div>
       </div>
 
-      <ResistancePanel
-        class="report-col"
-        :analysis="analysis"
-        :active-id="activeTrapId"
-        :timings="combo.timings"
-        :applied="applied"
-        @select="(id) => (activeTrapId = id)"
-        @apply="applyInterrupt"
-      />
+      <ResistancePanel class="report-col" :analysis="analysis" :active-id="activeTrapId" :timings="line.timings"
+        :applied="applied" @select="(id) => (activeTrapId = id)" @apply="applyInterrupt" />
     </div>
 
     <!-- 卡组 / 起手 / 目标 -->
-    <div v-if="deckDrawer && combo" class="overlay center" @click.self="deckDrawer = false">
+    <div v-if="deckDrawer && line" class="overlay center" @click.self="deckDrawer = false">
       <div class="modal deck-modal">
         <div class="modal-head">
           <span style="font-size: 14px; font-weight: 600">卡组 · 起手 · 目标</span>
           <button class="icon-btn" @click="deckDrawer = false">✕</button>
         </div>
         <div class="modal-body">
+          <div class="inline-note" style="margin-bottom: 10px">
+            这些是「{{ line.name }}」的卡组与起手，每条展开链各自独立。
+          </div>
           <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px">
             <div class="field">
               <label>卡组 / 系统</label>
-              <input v-model="combo.deckName" class="input" placeholder="例如 HERO" />
+              <input v-model="line.deckName" class="input" placeholder="例如 HERO" />
             </div>
             <div class="field">
               <label>起手张数</label>
-              <input v-model.number="combo.handSize" type="number" min="1" max="10" class="input" />
+              <input v-model.number="line.handSize" type="number" min="1" max="10" class="input" />
             </div>
             <div class="field" style="grid-column: span 2">
               <label>目标终场</label>
-              <input v-model="combo.goal" class="input" placeholder="例如：暗爪 + 天空侠 + 手卡资源" />
+              <input v-model="line.goal" class="input" placeholder="例如：暗爪 + 天空侠 + 手卡资源" />
             </div>
           </div>
           <div class="divider" />
-          <DeckSidebar />
+          <DeckSidebar :line="line" />
         </div>
       </div>
     </div>
 
-    <TimingEditor
-      v-if="editor"
-      :timing="editor.timing"
-      @close="editor = null"
-      @save="saveTiming"
-      @remove="removeTiming"
-    />
+    <TimingEditor v-if="editor" :timing="editor.timing" @close="editor = null" @save="saveTiming"
+      @remove="removeTiming" />
 
-    <ChainEditor
-      v-if="chainEditor"
-      :chain="chainEditor.chain"
-      :link="chainEditor.link"
-      :host-name="chainEditor.hostName"
-      @close="chainEditor = null"
-      @save="saveChain"
-      @remove="removeChainFromEditor"
-    />
+    <ChainEditor v-if="chainEditor" :chain="chainEditor.chain" :link="chainEditor.link"
+      :host-name="chainEditor.hostName" @close="chainEditor = null" @save="saveChain" @remove="removeChainFromEditor" />
 
     <HandtrapEditor v-if="handtrapModal" @close="handtrapModal = false" />
 
-    <DuelPlayback
-      v-if="playback && combo && analysis"
-      :timings="combo.timings"
-      :states="analysis.states"
-      :frames="analysis.frames"
-      :name="combo.name"
-      @close="playback = false"
-    />
+    <ComboCards v-if="cardsModal && combo" :lines="combo.lines" @close="cardsModal = false" />
+
+    <DuelPlayback v-if="playback && line && analysis" :timings="line.timings" :states="analysis.states"
+      :frames="analysis.frames" :name="`${combo?.name || ''} · ${line.name}`" @close="playback = false" />
 
     <!-- 导入 -->
     <div v-if="importModal" class="overlay center" @click.self="importModal = false">
@@ -294,12 +298,9 @@ function deleteCombo() {
         </div>
         <div class="modal-body">
           <input type="file" accept=".json,application/json" class="input" @change="onFile" />
-          <textarea
-            v-model="importText"
-            class="textarea"
+          <textarea v-model="importText" class="textarea"
             style="margin-top: 10px; min-height: 160px; font-family: var(--mono); font-size: 11px"
-            placeholder="粘贴导出的 JSON（新版 timings，或旧版 steps 会自动转换）"
-          />
+            placeholder="粘贴导出的 JSON（新版 lines / timings，或旧版 steps 会自动转换）" />
         </div>
         <div class="modal-foot">
           <button class="btn ghost" @click="importModal = false">取消</button>

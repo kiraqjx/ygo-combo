@@ -171,7 +171,11 @@ export interface DeckEntry {
   count: number
 }
 
-export interface Combo {
+/**
+ * 一条展开链：卡组 / 起手 / 目标 + 有序时序。
+ * 一个展开（Combo）可以有多条展开链，共用卡表与导入导出。
+ */
+export interface ComboLine {
   id: string
   name: string
   deckName: string
@@ -180,6 +184,14 @@ export interface Combo {
   opening: OpeningCard[]
   deck: DeckEntry[]
   timings: Timing[]
+}
+
+export interface Combo {
+  id: string
+  name: string
+  lines: ComboLine[]
+  /** 当前选中的展开链 */
+  activeLineId: string
   updatedAt: number
 }
 

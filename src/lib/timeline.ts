@@ -1,7 +1,7 @@
 import type {
   CardMove,
   ChainEntry,
-  Combo,
+  ComboLine,
   HandtrapReport,
   Interrupt,
   LinkKind,
@@ -153,7 +153,7 @@ function snapshot(ledger: Ledger, summons: number, slots: Slots): ZoneSnapshot {
 }
 
 /** 起手在手上，同时从卡组余量里扣除；未录满的部分按未知手牌补足 */
-export function initialLedger(combo: Combo): Ledger {
+export function initialLedger(combo: ComboLine): Ledger {
   const ledger = emptyLedger()
   for (const entry of combo.deck) addCard(ledger.deck, entry.name, entry.count)
   for (const card of combo.opening) {
@@ -165,7 +165,7 @@ export function initialLedger(combo: Combo): Ledger {
   return ledger
 }
 
-export function startingZones(combo: Combo): ZoneSnapshot {
+export function startingZones(combo: ComboLine): ZoneSnapshot {
   return snapshot(initialLedger(combo), 0, emptySlots())
 }
 
@@ -201,7 +201,7 @@ function effectiveTags(move: CardMove, negateTags: string[]): string[] {
   return [...set]
 }
 
-function buildCancels(combo: Combo, interrupts: Interrupt[]): Cancels {
+function buildCancels(combo: ComboLine, interrupts: Interrupt[]): Cancels {
   const cancels: Cancels = {
     negatedTimings: new Set(),
     canceledMoves: new Set(),
@@ -325,7 +325,7 @@ function applyMove(
   return isSummonMove(move) ? count : 0
 }
 
-function run(combo: Combo, opts: RunOptions): RunResult {
+function run(combo: ComboLine, opts: RunOptions): RunResult {
   const ledger = initialLedger(combo)
   const slots = emptySlots()
   const origin = new Map<string, Origin>()
@@ -504,7 +504,7 @@ export function handtrapName(id?: string): string {
 }
 
 /** 把用户手动声明的依赖转成与自动链路同构的 TimingLink */
-function resolveManualLinks(combo: Combo): TimingLink[] {
+function resolveManualLinks(combo: ComboLine): TimingLink[] {
   const indexOf = new Map(combo.timings.map((timing, index) => [timing.id, index]))
   const out: TimingLink[] = []
 
@@ -541,7 +541,7 @@ function resolveManualLinks(combo: Combo): TimingLink[] {
   return out
 }
 
-export function analyzeTimeline(combo: Combo, interrupts: Interrupt[] = []): TimelineAnalysis {
+export function analyzeTimeline(combo: ComboLine, interrupts: Interrupt[] = []): TimelineAnalysis {
   const cancels = buildCancels(combo, interrupts)
   const base = run(combo, {
     cancels: buildCancels(combo, []),
@@ -585,13 +585,13 @@ export function handtrapsAt(timing: Timing): string[] {
   return [...set]
 }
 
-export function handtrapSites(combo: Combo, handtrapId: string): number[] {
+export function handtrapSites(combo: ComboLine, handtrapId: string): number[] {
   return combo.timings
     .map((timing, index) => (handtrapsAt(timing).includes(handtrapId) ? index : -1))
     .filter((index) => index >= 0)
 }
 
-function buildReport(defId: string, combo: Combo): HandtrapReport {
+function buildReport(defId: string, combo: ComboLine): HandtrapReport {
   const def = HANDTRAP_MAP[defId]
   const sites = handtrapSites(combo, defId)
   const base: HandtrapReport = {
@@ -656,7 +656,7 @@ function buildReport(defId: string, combo: Combo): HandtrapReport {
   }
 }
 
-export function handtrapReports(combo: Combo): HandtrapReport[] {
+export function handtrapReports(combo: ComboLine): HandtrapReport[] {
   return HANDTRAPS.map((def) => buildReport(def.id, combo))
 }
 
@@ -664,7 +664,7 @@ export interface ComboAnalysis extends TimelineAnalysis {
   reports: HandtrapReport[]
 }
 
-export function analyzeCombo(combo: Combo, interrupts: Interrupt[] = []): ComboAnalysis {
+export function analyzeCombo(combo: ComboLine, interrupts: Interrupt[] = []): ComboAnalysis {
   const analysis = analyzeTimeline(combo, interrupts)
   return { ...analysis, reports: handtrapReports(combo) }
 }

@@ -15,7 +15,7 @@
 
 ### 领域模型（`src/types.ts`）
 
-一个 `Combo` = 起手 `opening` + 卡组 `deck` + 有序的 `timings`。`Timing` 不是"事件标签"，而是一个时点上的完整结算过程，由四段 `CardMove[]` 组成并严格按序推演：
+一个 `Combo`（展开）包含多条 `ComboLine`（展开链），每条展开链各自持有起手 `opening` + 卡组 `deck` + 有序的 `timings` 与 `goal`；`Combo` 只保留 `name` / `lines` / `activeLineId`，卡表、导出、导入是展开级操作。推演内核（`lib/timeline.ts`）接收的是单条 `ComboLine`。`Timing` 不是"事件标签"，而是一个时点上的完整结算过程，由四段 `CardMove[]` 组成并严格按序推演：
 
 `setup`（发动时置入魔陷区，规则必发生）→ `cost`（必成功、不吃手坑）→ `effect`（可被手坑无效/封锁）→ `settle`（结算后送墓等，必发生）。`chains` 是 C2..Cn 的 `ChainEntry`，结构同上。
 
@@ -57,7 +57,7 @@
 
 ### 内置示例数据
 
-`src/data/sampleCombo.ts` 是唯一内置示例：内容为真实导出的 combo JSON，`createSampleCombo()` 每次返回深拷贝，避免编辑污染源数据；`stores/combos.ts` 在无本地数据、删空、点「示例」时都用它。`src/data/demoCombo.ts` 是早期手写的两只示例（英雄假面 / 混沌），已无引用，属于遗留代码——不要把它当作新的示例来源。
+`src/data/sampleCombo.ts` 是唯一内置示例：内容为真实导出的 combo JSON（单条展开链），`createSampleCombo()` 每次返回深拷贝，避免编辑污染源数据；`stores/combos.ts` 只在首次访问（无本地数据）时用它播种，工坊里没有「示例」按钮。旧版扁平结构（卡组 / 起手 / timings 在顶层）与更旧的 `steps` 数据都会在 `normalizeCombo()` / `migrateLegacy()` 里自动转成单链展开。
 
 ## 已知文档偏差
 

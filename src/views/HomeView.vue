@@ -8,7 +8,8 @@ import { useHandtrapStore } from '@/stores/handtraps'
 const cardStore = useCardStore()
 const ht = useHandtrapStore()
 
-const demo = createSampleCombo()
+const demoCombo = createSampleCombo()
+const demo = demoCombo.lines[0]
 const demoAnalysis = analyzeCombo(demo)
 
 const highlightIds = ['maxx', 'fuwalos', 'droll', 'ash']
@@ -114,7 +115,7 @@ const statCards = computed(() => [
     <section class="section">
       <div class="section-head">
         <div>
-          <h2>示例推演 · {{ demo.name }}</h2>
+          <h2>示例推演 · {{ demoCombo.name }}</h2>
           <p>
             内置示例的实时结果{{ demo.goal ? `：${demo.goal}` : '' }}。进入工坊可以逐时序展开状态。
           </p>

@@ -9,6 +9,12 @@ export function isExtraDeckCard(card?: CardData | null): boolean {
   return card.kinds.some((k) => ['融合', '同调', '超量', '连接'].includes(k))
 }
 
+/** 超量怪兽：召唤素材会叠在怪兽下面，发动效果通常要取除素材 */
+export function isXyzCard(card?: CardData | null): boolean {
+  if (!card || card.frame !== 'monster') return false
+  return card.kinds.includes('超量') || card.rankLabel === 'RANK'
+}
+
 const TEST = {
   addFromDeck: /从卡组[^。；]{0,50}?(?:加入手卡|加入手牌|加入手札)/,
   addFromDeckMixed: /从(?:手卡·卡组|卡组·手卡|手卡或卡组|卡组或手卡)[^。；]{0,40}?(?:加入手卡|加入手牌)/,
@@ -120,7 +126,7 @@ function ruleMove(
   from: ZoneId,
   to: ZoneId,
   phase: CardMove['phase'],
-  note: string,
+  note?: string,
   count?: number,
 ): CardMove {
   return { id: uid(), cardName, from, to, phase, count, note, auto: true }
@@ -135,11 +141,30 @@ export function tributeCount(card?: CardData | null): number {
 }
 
 /**
+ * 额外卡组召唤（融合 / 同调 / 超量 / 连接）预计消耗的素材数：
+ * - 连接：连接标记数 = 连接值
+ * - 超量：阶级
+ * - 融合 / 同调：至少 2 只
+ * 只用于提示，不写进素材行：素材行按「一行一张卡」记录，数量由牌手按实际填。
+ */
+export function materialCount(card?: CardData | null): number {
+  if (!card) return 1
+  if (card.rankLabel === 'LINK' || card.kinds.includes('连接')) {
+    return Math.max(1, card.linkMarkers?.length || card.level || 1)
+  }
+  if (card.rankLabel === 'RANK' || card.kinds.includes('超量')) return Math.max(1, card.level || 1)
+  if (card.kinds.includes('融合') || card.kinds.includes('同调')) return 2
+  return 1
+}
+
+/**
  * 规则处理自动生成：按操作类型 + 卡种 + 起始区域，给出「必定发生」的移动。
  * - 召唤 / 特召 / 盖放：主移动（手卡 → 场上 / 魔陷区）
  * - 上级召唤：额外生成祭品解放（场上 → 墓地，记在 cost）
+ * - 额外卡组召唤：额外生成素材（场上 → 墓地；超量召唤则叠到怪兽下面）
+ * - 超量怪兽在场上发动效果：额外生成「取除超量素材」cost
  * - 魔法 / 陷阱发动：置入魔陷区，结算后送墓 / 去额外 / 留场
- * - 怪兽效果发动：不产生规则移动
+ * - 其他怪兽效果发动：不产生规则移动
  */
 export function autoRuleMoves({ operation, card, cardName, from }: RuleInput): RuleMoves {
   const out = emptyRules()
@@ -179,11 +204,26 @@ export function autoRuleMoves({ operation, card, cardName, from }: RuleInput): R
         if (!stays) out.settle.push(ruleMove(cardName, 'st', 'gy', 'auto', '结算后送去墓地'))
         return out
       }
+      // 额外卡组召唤：素材是召唤手续的一部分，必定发生，记在规则处理段
+      // 一行 = 一张素材卡，不带数量与说明；超量召唤的素材挂在怪兽下面，其他召唤送墓
+      if (zone === 'extra' && isExtraDeckCard(card)) {
+        out.setup.push(
+          ruleMove('作为素材的怪兽', 'field', isXyzCard(card) ? 'material' : 'gy', 'auto'),
+        )
+      }
       out.effect.push(ruleMove(cardName, zone, 'field', 'effect', '特殊召唤到场上'))
       return out
     }
 
     case 'set':
+      // 怪兽盖放 = 里侧守备表示放到怪兽区；魔陷盖放到魔陷区
+      if (isMonster) {
+        out.effect.push({
+          ...ruleMove(cardName, zone, 'field', 'effect', '盖放怪兽（里侧守备）'),
+          position: 'set',
+        })
+        return out
+      }
       out.effect.push(ruleMove(cardName, zone, 'st', 'effect', '盖放到魔陷区'))
       return out
 
@@ -209,6 +249,10 @@ export function autoRuleMoves({ operation, card, cardName, from }: RuleInput): R
       // 魔陷在魔陷区发动效果：结算后送墓（永续 / 装备 / 场地留场）
       if (isSpellTrap && zone === 'st' && !stays && !isPendulumSpell) {
         out.settle.push(ruleMove(cardName, 'st', 'gy', 'auto', '结算后送去墓地'))
+      }
+      // 超量怪兽在场上发动效果：取除超量素材是发动代价
+      if (isXyzCard(card) && zone === 'field') {
+        out.cost.push(ruleMove('取除的素材', 'material', 'gy', 'cost'))
       }
       return out
     }
@@ -258,7 +302,12 @@ function parseCount(raw?: string): number {
   return CN_NUM[raw] || 1
 }
 
-export function inferTiming(card: CardData): TimingInference {
+export interface InferOptions {
+  /** 限定操作类别：选了「卡片操作」时不再推断召唤 / 盖放这类牌手操作 */
+  kind?: 'player' | 'card'
+}
+
+export function inferTiming(card: CardData, options: InferOptions = {}): TimingInference {
   const text = pickEffectSegment(card)
   const extra = isExtraDeckCard(card)
   const normal = card.frame === 'monster' && card.kinds.includes('通常')
@@ -278,7 +327,11 @@ export function inferTiming(card: CardData): TimingInference {
   let operation: OperationKind = 'activate'
   let from: ZoneId = card.frame === 'monster' ? 'field' : 'hand'
 
-  if (card.frame === 'monster') {
+  if (options.kind === 'card') {
+    // 卡片操作：只可能是「发动卡片效果」（超量 / 额外卡组怪兽也按场上发动处理）
+    operation = 'activateEffect'
+    from = card.frame === 'monster' ? (gyTrigger ? 'gy' : 'field') : gyTrigger ? 'gy' : 'st'
+  } else if (card.frame === 'monster') {
     if (normal) {
       if ((card.level ?? 0) >= 5) {
         operation = 'tributeSummon'
@@ -323,6 +376,16 @@ export function inferTiming(card: CardData): TimingInference {
   settle.push(...rules.settle)
   if (operation === 'activate') hints.push('发动：置入魔陷区；结算后按卡种送墓或留场')
   if (operation === 'tributeSummon') hints.push('祭品记在 cost 段，可改成具体的怪兽')
+  if (operation === 'specialSummon' && from === 'extra' && rules.setup.length) {
+    hints.push(
+      isXyzCard(card)
+        ? '超量召唤的素材记在规则处理段，会叠在这只怪兽下面'
+        : '额外卡组召唤的素材记在规则处理段：可改成除外 / 具体怪兽',
+    )
+  }
+  if (operation === 'activateEffect' && isXyzCard(card) && from === 'field') {
+    hints.push('超量怪兽发动效果：取除素材已记入 cost')
+  }
 
   if (addsFromDeck) {
     effect.push(move('检索目标', 'deck', 'hand', 'effect', '从卡组加入手卡'))

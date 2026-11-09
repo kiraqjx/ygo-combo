@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import type { CardData, ZoneCard, ZoneId, ZoneSnapshot } from '@/types'
-import { SLOT_COUNT, ZONE_LABELS } from '@/types'
-import { cardImageUrl } from '@/lib/cardDb'
+import { POSITION_LABELS, SLOT_COUNT, ZONE_LABELS } from '@/types'
+import { cardBackImageUrl, cardImageUrl } from '@/lib/cardDb'
 import { useCardStore } from '@/stores/cards'
 import CardDetail from './CardDetail.vue'
 
@@ -25,7 +25,7 @@ function badgeOf(zone: ZoneId, name: string): string {
 }
 
 const store = useCardStore()
-const inspecting = ref<{ card: CardData | null; name: string } | null>(null)
+const inspecting = ref<{ card: CardData | null; name: string; materials: string[] } | null>(null)
 
 const PILE_ZONES: ZoneId[] = ['extra', 'gy', 'banish', 'deck']
 
@@ -52,8 +52,22 @@ function imageOf(name: string): string {
   return card ? cardImageUrl(card.id) : ''
 }
 
+/** 卡背图加载失败就藏掉，露出底下的渐变卡背 */
+function hideCardBack(event: Event) {
+  ;(event.target as HTMLImageElement).style.display = 'none'
+}
+
 function inspect(card: ZoneCard) {
-  inspecting.value = { card: store.getCardByName(card.name) || null, name: card.name }
+  inspecting.value = {
+    card: store.getCardByName(card.name) || null,
+    name: card.name,
+    materials: [...(card.materials || [])],
+  }
+}
+
+/** 点击素材：查看素材卡本身 */
+function inspectMaterial(name: string) {
+  inspecting.value = { card: store.getCardByName(name) || null, name, materials: [] }
 }
 
 const limit = computed(() => props.pileLimit ?? 8)
@@ -90,13 +104,32 @@ const stSlots = computed(() => slotRow('st'))
               v-for="(card, index) in fieldSlots"
               :key="`field-${index}`"
               class="duel-slot"
-              :class="{ filled: Boolean(card) }"
-              :title="card?.name || '空'"
+              :class="{
+                filled: Boolean(card),
+                defense: card?.position === 'defense',
+                back: card?.position === 'set',
+              }"
+              :title="card ? `${card.name}${card.position && card.position !== 'attack' ? `（${POSITION_LABELS[card.position]}）` : ''}` : '空'"
               @click="card && inspect(card)"
             >
               <template v-if="card">
-                <img v-if="imageOf(card.name)" :src="imageOf(card.name)" :alt="card.name" loading="lazy" />
+                <span v-if="card.position === 'set'" class="duel-slot-back">
+                  <img :src="cardBackImageUrl" alt="里侧守备表示" loading="lazy" @error="hideCardBack" />
+                </span>
+                <img
+                  v-else-if="imageOf(card.name)"
+                  :src="imageOf(card.name)"
+                  :alt="card.name"
+                  loading="lazy"
+                />
                 <span v-else class="duel-slot-fallback">{{ card.name }}</span>
+                <span
+                  v-if="card.materials?.length"
+                  class="duel-material"
+                  :title="`超量素材 ×${card.materials.length}（点开怪兽查看）`"
+                >
+                  素材×{{ card.materials.length }}
+                </span>
                 <span v-if="badgeOf('field', card.name)" class="duel-badge">
                   {{ badgeOf('field', card.name) }}
                 </span>
@@ -186,11 +219,31 @@ const stSlots = computed(() => slotRow('st'))
     </div>
 
     <div v-if="inspecting" class="card-detail-layer" @click.self="inspecting = null">
-      <CardDetail
-        :card="inspecting.card"
-        :fallback-name="inspecting.name"
-        @close="inspecting = null"
-      />
+      <div class="card-detail-stack">
+        <div v-if="inspecting.materials.length" class="material-strip">
+          <span class="material-strip-label">
+            叠在下面的超量素材 ×{{ inspecting.materials.length }}
+          </span>
+          <div class="material-strip-cards">
+            <button
+              v-for="(name, index) in inspecting.materials"
+              :key="`material-${name}-${index}`"
+              class="material-chip"
+              :title="name"
+              @click="inspectMaterial(name)"
+            >
+              <img v-if="imageOf(name)" :src="imageOf(name)" :alt="name" />
+              <span v-else class="material-chip-fallback">{{ name }}</span>
+              <span class="material-chip-name">{{ name }}</span>
+            </button>
+          </div>
+        </div>
+        <CardDetail
+          :card="inspecting.card"
+          :fallback-name="inspecting.name"
+          @close="inspecting = null"
+        />
+      </div>
     </div>
   </div>
 </template>

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import type { CardData, CardMove, Timing, ZoneId } from '@/types'
-import { SLOT_COUNT, UNKNOWN_CARD, ZONE_LABELS, ZONE_ORDER } from '@/types'
+import type { BattlePosition, CardData, CardMove, Timing, ZoneId } from '@/types'
+import { POSITION_LABELS, SLOT_COUNT, UNKNOWN_CARD, ZONE_LABELS, ZONE_ORDER } from '@/types'
 import { suggestHandtraps, uid } from '@/lib/infer'
 import { useCardStore } from '@/stores/cards'
 import { useHandtrapStore } from '@/stores/handtraps'
@@ -28,13 +28,17 @@ const moveThumb = (move: CardMove) => {
 }
 
 function add() {
+  // 这一段已经在处理超量素材时，新行接着按素材的语义填默认值
+  const usesMaterial = moves.value.some((item) => item.from === 'material' || item.to === 'material')
+  const attach = props.phase === 'auto' && usesMaterial
+  const detach = props.phase === 'cost' && usesMaterial
   moves.value = [
     ...moves.value,
     {
       id: uid(),
       cardName: '',
-      from: props.phase === 'cost' ? 'hand' : 'deck',
-      to: props.phase === 'cost' ? 'gy' : 'hand',
+      from: attach ? 'field' : detach ? 'material' : props.phase === 'cost' ? 'hand' : 'deck',
+      to: attach ? 'material' : props.phase === 'cost' ? 'gy' : 'hand',
       phase: props.phase,
       handtraps: [],
       note: '',
@@ -83,6 +87,23 @@ function setSlot(move: CardMove, raw: string) {
   else delete move.slot
 }
 
+/** 选中 / 取消「叠放到该格位已有的怪兽上」 */
+function toggleOverlay(move: CardMove) {
+  if (move.overlay) delete move.overlay
+  else move.overlay = true
+}
+
+/** 超量素材相关：格位表示素材挂在几号位的怪兽下面 */
+const isMaterialMove = (move: CardMove) => move.to === 'material' || move.from === 'material'
+
+const POSITIONS: BattlePosition[] = ['attack', 'defense', 'set']
+
+/** 表示形式：攻击 / 守备 / 里侧守备（盖放） */
+function setPosition(move: CardMove, raw: string) {
+  if (raw === 'attack') delete move.position
+  else move.position = raw as BattlePosition
+}
+
 const toneStyle = (id: string) => {
   const tone = ht.map[id]?.tone || '#9ea7b3'
   return { color: tone, borderColor: `${tone}55`, background: `${tone}14` }
@@ -128,6 +149,14 @@ const toneStyle = (id: string) => {
           <input type="checkbox" :checked="move.unknown" @change="toggleUnknown(move)" />
           未知
         </label>
+        <label
+          v-if="move.to === 'field'"
+          class="unknown-toggle"
+          title="超量叠放：被叠的旧怪兽送墓、素材由新怪兽继承；叠谁看素材行（旧怪兽 → 超量素材）或该格位上的怪兽，格位是新怪兽的位置"
+        >
+          <input type="checkbox" :checked="Boolean(move.overlay)" @change="toggleOverlay(move)" />
+          叠放
+        </label>
 
         <select v-model="move.from" class="select" style="width: 88px">
           <option v-for="zone in ZONE_ORDER" :key="zone" :value="zone">{{ ZONE_LABELS[zone] }}</option>
@@ -137,17 +166,34 @@ const toneStyle = (id: string) => {
           <option v-for="zone in ZONE_ORDER" :key="zone" :value="zone">{{ ZONE_LABELS[zone] }}</option>
         </select>
         <select
-          v-if="move.to === 'field' || move.to === 'st'"
+          v-if="move.to === 'field' || move.to === 'st' || isMaterialMove(move)"
           class="select"
-          style="width: 82px"
-          :title="move.to === 'field' ? '放到怪兽区几号位' : '放到魔陷区几号位'"
+          style="width: 88px"
+          :title="
+            isMaterialMove(move)
+              ? '素材挂在几号位的怪兽下面（留空 = 本时序主卡所在格位）'
+              : move.to === 'field'
+                ? '放到怪兽区几号位'
+                : '放到魔陷区几号位'
+          "
           :value="move.slot || 0"
           @change="setSlot(move, ($event.target as HTMLSelectElement).value)"
         >
           <option :value="0">格位自动</option>
           <option v-for="n in SLOT_COUNT" :key="n" :value="n">{{ n }} 号位</option>
         </select>
-        <input v-model.number="move.count" type="number" min="1" max="10" class="input" style="width: 56px" />
+        <select
+          v-if="move.to === 'field'"
+          class="select"
+          style="width: 92px"
+          title="放到场上时的表示形式"
+          :value="move.position || 'attack'"
+          @change="setPosition(move, ($event.target as HTMLSelectElement).value)"
+        >
+          <option v-for="position in POSITIONS" :key="position" :value="position">
+            {{ POSITION_LABELS[position] }}
+          </option>
+        </select>
         <button class="icon-btn" title="删除这一段" @click="remove(move.id)">✕</button>
       </div>
 

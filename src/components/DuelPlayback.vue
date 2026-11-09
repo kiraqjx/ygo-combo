@@ -9,10 +9,10 @@ import type {
   ZoneId,
   ZoneSnapshot,
 } from '@/types'
-import { OPERATION_DEFS, ZONE_LABELS } from '@/types'
+import { OPERATION_DEFS, POSITION_LABELS, ZONE_LABELS } from '@/types'
 import type { BoardFramePaint, CardKind } from '@/lib/boardCanvas'
 import { downloadBlob, renderBoardGif } from '@/lib/exportGif'
-import { cardImageProxyUrl } from '@/lib/cardDb'
+import { cardBackImageUrl, cardImageProxyUrl } from '@/lib/cardDb'
 import { useCardStore } from '@/stores/cards'
 import DuelBoard from './DuelBoard.vue'
 
@@ -28,7 +28,7 @@ const emit = defineEmits<{ close: [] }>()
 
 const STEP_MS = 900
 const SPEEDS = [0.5, 1, 2]
-const ZONES: ZoneId[] = ['hand', 'field', 'st', 'gy', 'banish', 'extra', 'deck']
+const ZONES: ZoneId[] = ['hand', 'field', 'st', 'material', 'gy', 'banish', 'extra', 'deck']
 
 /** 游标：0 = 开局，i + 1 = 第 i 帧之后的画面 */
 const index = ref(0)
@@ -115,7 +115,10 @@ const zoneKey = (cards: ZoneCard[]) =>
 
 function diffZones(prev?: ZoneSnapshot | null, next?: ZoneSnapshot | null): ZoneId[] {
   if (!prev || !next) return []
-  return ZONES.filter((zone) => zoneKey(next[zone] || []) !== zoneKey(prev[zone] || []))
+  const changed = ZONES.filter((zone) => zoneKey(next[zone] || []) !== zoneKey(prev[zone] || []))
+  // 素材变化也意味着场上怪兽变了，一起高亮怪兽区
+  if (changed.includes('material') && !changed.includes('field')) changed.push('field')
+  return changed
 }
 
 /** 与上一个画面相比发生变化的区域，用来做高亮 */
@@ -145,7 +148,13 @@ function movesText(moves?: CardMove[]): string {
   return moves
     .map((move) => {
       const count = move.count && move.count > 1 ? ` ×${move.count}` : ''
-      return `「${move.cardName}」${count} ${ZONE_LABELS[move.from]} → ${ZONE_LABELS[move.to]}`
+      const material = move.from === 'material' || move.to === 'material'
+      const position =
+        move.to === 'field' && move.position && move.position !== 'attack'
+          ? `（${POSITION_LABELS[move.position]}）`
+          : ''
+      const extra = `${material && move.slot ? `（${move.slot} 号位）` : ''}${move.overlay ? '（叠放）' : ''}${position}`
+      return `「${move.cardName}」${count} ${ZONE_LABELS[move.from]} → ${ZONE_LABELS[move.to]}${extra}`
     })
     .join(' ＋ ')
 }
@@ -224,6 +233,7 @@ async function runExport(scope: 'all' | 'timing') {
       onProgress: (value) => (progress.value = value),
       shouldCancel: () => canceled,
       imageUrlOf,
+      cardBackUrl: cardBackImageUrl,
     })
     if (blob) {
       const safeName = (props.name || 'combo').replace(/[\\/:*?"<>|]/g, '_')

@@ -1,4 +1,5 @@
 import type {
+  BattlePosition,
   CardMove,
   ChainEntry,
   ComboLine,
@@ -62,6 +63,8 @@ function emptyLedger(): Ledger {
     banish: new Map(),
     field: new Map(),
     st: new Map(),
+    // 超量素材按格位挂在怪兽下面（见 Slots.materials），这里只留一个空表保持结构一致
+    material: new Map(),
   }
 }
 
@@ -88,16 +91,25 @@ function toList(map: Map<string, number>): ZoneCard[] {
 
 type SlotRow = (string | null)[]
 
-/** 怪兽区 / 魔陷区按格位记录卡名（下标 = 格位 - 1） */
+/** 怪兽区 / 魔陷区按格位记录卡名（下标 = 格位 - 1），怪兽格位另带素材与表示形式 */
 interface Slots {
   field: SlotRow
   st: SlotRow
+  /** 每个怪兽格位下面的超量素材（卡名，可重复；同名单卡分别占一条） */
+  materials: string[][]
+  /** 每个怪兽格位的表示形式 */
+  positions: BattlePosition[]
 }
 
 const isSlotZone = (zone: ZoneId): zone is 'field' | 'st' => zone === 'field' || zone === 'st'
 
 function emptySlots(): Slots {
-  return { field: Array(SLOT_COUNT).fill(null), st: Array(SLOT_COUNT).fill(null) }
+  return {
+    field: Array(SLOT_COUNT).fill(null),
+    st: Array(SLOT_COUNT).fill(null),
+    materials: Array.from({ length: SLOT_COUNT }, () => [] as string[]),
+    positions: Array.from({ length: SLOT_COUNT }, () => 'attack' as BattlePosition),
+  }
 }
 
 /** 1-5 之外的格位一律夹到两端的有效格位 */
@@ -106,43 +118,100 @@ function slotIndex(slot?: number): number | null {
   return Math.min(Math.floor(slot), SLOT_COUNT) - 1
 }
 
-/** 进场：先放指定格位，放不下（被占 / 多张）再从前往后补空位 */
-function placeSlot(row: SlotRow, name: string, slot: number | undefined, count: number) {
-  let placed = 0
+/** 进场：先放指定格位，放不下（被占 / 多张）再从前往后补空位；返回落到的格位下标 */
+function placeSlot(row: SlotRow, name: string, slot: number | undefined, count: number): number[] {
+  const placedAt: number[] = []
   const preferred = slotIndex(slot)
   if (preferred !== null && (!row[preferred] || row[preferred] === name)) {
     row[preferred] = name
-    placed += 1
+    placedAt.push(preferred)
   }
-  for (let i = 0; i < SLOT_COUNT && placed < count; i += 1) {
+  for (let i = 0; i < SLOT_COUNT && placedAt.length < count; i += 1) {
     if (!row[i]) {
       row[i] = name
-      placed += 1
+      placedAt.push(i)
     }
   }
+  return placedAt
 }
 
-/** 离场：把这张卡占用的格位清空 */
-function clearSlot(row: SlotRow, name: string, count: number) {
-  let cleared = 0
-  for (let i = 0; i < row.length && cleared < count; i += 1) {
+/** 离场：把这张卡占用的格位清空；返回被清空的格位下标 */
+function clearSlot(row: SlotRow, name: string, count: number): number[] {
+  const cleared: number[] = []
+  for (let i = 0; i < row.length && cleared.length < count; i += 1) {
     if (row[i] === name) {
       row[i] = null
-      cleared += 1
+      cleared.push(i)
     }
   }
+  return cleared
 }
 
 function slotCards(row: SlotRow): (ZoneCard | null)[] {
   return row.map((name) => (name ? { name, count: 1 } : null))
 }
 
+/* ------------------------------------------------------------------ */
+/* 超量素材                                                             */
+/* ------------------------------------------------------------------ */
+
+/** 怪兽离场：它下面的超量素材按规则送去墓地 */
+function dumpMaterials(slots: Slots, ledger: Ledger, indexes: number[]) {
+  for (const index of indexes) {
+    for (const name of slots.materials[index]) addCard(ledger.gy, name, 1)
+    slots.materials[index] = []
+  }
+}
+
+/** 把素材叠到某个格位的怪兽下面 */
+function attachMaterials(slots: Slots, index: number, name: string, count: number) {
+  for (let i = 0; i < count; i += 1) slots.materials[index].push(name)
+}
+
+/** 素材该挂到哪个格位：指定格位 > 本时序主卡所在的场上格位 */
+function attachTarget(slots: Slots, slot: number | undefined, cardName: string): number | null {
+  const fixed = slotIndex(slot)
+  if (fixed !== null) return fixed
+  if (cardName) {
+    const index = slots.field.indexOf(cardName)
+    if (index >= 0) return index
+  }
+  return null
+}
+
+/** 取除素材时优先从哪只怪兽身上取：指定格位 > 本时序主卡 > 其他带素材的怪兽 */
+function detachOrder(slots: Slots, slot: number | undefined, cardName: string): number[] {
+  const fixed = slotIndex(slot)
+  if (fixed !== null) return [fixed]
+  const order = Array.from({ length: SLOT_COUNT }, (_, i) => i)
+  const own = cardName ? slots.field.indexOf(cardName) : -1
+  if (own >= 0) {
+    order.splice(order.indexOf(own), 1)
+    order.unshift(own)
+  }
+  return order
+}
+
 function snapshot(ledger: Ledger, summons: number, slots: Slots): ZoneSnapshot {
+  const materialMap = new Map<string, number>()
+  for (const list of slots.materials) {
+    for (const name of list) addCard(materialMap, name, 1)
+  }
   return {
     hand: toList(ledger.hand),
     field: toList(ledger.field),
     st: toList(ledger.st),
-    fieldSlots: slotCards(slots.field),
+    material: toList(materialMap),
+    fieldSlots: slots.field.map((name, index) =>
+      name
+        ? {
+            name,
+            count: 1,
+            materials: [...slots.materials[index]],
+            position: slots.positions[index],
+          }
+        : null,
+    ),
     stSlots: slotCards(slots.st),
     gy: toList(ledger.gy),
     banish: toList(ledger.banish),
@@ -259,6 +328,211 @@ interface RunResult {
 
 const isSummonMove = (move: CardMove) => move.to === 'field' && move.from !== 'field'
 
+/** 还没确定挂到哪只怪兽下面的素材（本时序后面才把怪兽放到场上） */
+interface PendingMaterial {
+  move: CardMove
+  count: number
+}
+
+/** 从账本里取卡；卡组 / 额外卡组不校验余量，其他区域不足只记 reason 不中断 */
+function takeFromLedger(
+  ledger: Ledger,
+  from: ZoneId,
+  key: string,
+  count: number,
+  unknown: boolean,
+  reasons: string[],
+) {
+  if (from === 'deck' || from === 'extra') {
+    takeCard(ledger[from], key, count)
+    return
+  }
+  if (!TRACKED_ZONES.includes(from)) return
+  const available = ledger[from].get(key) || 0
+  if (!takeCard(ledger[from], key, count)) {
+    reasons.push(
+      `${unknown ? UNKNOWN_CARD : `「${key}」`}不足（${ZONE_LABELS[from]}）：需要 ${count}，只有 ${available}，已按可用处理`,
+    )
+  }
+}
+
+/**
+ * 从场上 / 魔陷区撤掉卡。
+ * 怪兽离场时它下面的超量素材送墓；`inheritTo` 有值时改为转移到该格位（叠放继承）。
+ */
+function leaveSlots(
+  ledger: Ledger,
+  slots: Slots,
+  from: ZoneId,
+  key: string,
+  count: number,
+  inheritTo?: number,
+) {
+  if (from === 'field') {
+    const cleared = clearSlot(slots.field, key, count)
+    for (const index of cleared) slots.positions[index] = 'attack'
+    if (inheritTo === undefined) {
+      dumpMaterials(slots, ledger, cleared)
+      return
+    }
+    for (const index of cleared) {
+      const kept = slots.materials[index]
+      slots.materials[index] = []
+      for (const name of kept) attachMaterials(slots, inheritTo, name, 1)
+    }
+  } else if (from === 'st') {
+    clearSlot(slots.st, key, count)
+  }
+}
+
+/** 本时序的超量素材处理状态 */
+interface MaterialFlow {
+  /** 先挂起、等怪兽落地再叠上去的素材 */
+  pending: PendingMaterial[]
+  /** 本时序是叠放召唤：被叠成素材的怪兽，它下面的素材要继承而不是送墓 */
+  inherit: boolean
+  /**
+   * 叠放目标格位：本时序里「被叠成素材的那只怪兽」原来站的位置。
+   * 只有牌手显式指定了素材行（旧怪兽 → 超量素材）时才知道叠在哪只怪兽上。
+   */
+  baseSlot: number | null
+}
+
+/**
+ * 叠放召唤时素材先挂到哪个格位：显式格位 > 被叠成素材的怪兽位置 > 场上唯一一只有素材的怪兽。
+ * 只用于给「挂起中的素材」找落点；真正的「叠在谁身上 / 新怪兽放哪」由 placeFieldCard 决定。
+ */
+function overlayTarget(slots: Slots, move: CardMove, baseSlot: number | null): number | null {
+  const fixed = slotIndex(move.slot)
+  if (fixed !== null) return fixed
+  if (baseSlot !== null) return baseSlot
+  const withMaterials: number[] = []
+  slots.materials.forEach((list, index) => {
+    if (list.length) withMaterials.push(index)
+  })
+  return withMaterials.length === 1 ? withMaterials[0] : null
+}
+
+/**
+ * 放到怪兽区。overlay 时「谁被叠放」和「新怪兽放几号位」是两件事：
+ * 被叠放的旧怪兽送墓、它的素材转到新怪兽所在格位；新怪兽按自己的格位摆放。
+ */
+function placeFieldCard(
+  ledger: Ledger,
+  slots: Slots,
+  name: string,
+  move: CardMove,
+  count: number,
+  baseSlot: number | null,
+  reasons: string[],
+): number[] {
+  const explicit = slotIndex(move.slot)
+  if (!move.overlay) return placeSlot(slots.field, name, move.slot, count)
+
+  // 谁被叠放：素材行指定的位置 > 显式格位上的怪兽 > 场上唯一一只有素材的怪兽
+  let base = baseSlot
+  if (base === null && explicit !== null && slots.field[explicit]) base = explicit
+  if (base === null) {
+    const withMaterials: number[] = []
+    slots.materials.forEach((list, index) => {
+      if (list.length) withMaterials.push(index)
+    })
+    if (withMaterials.length === 1) base = withMaterials[0]
+  }
+  if (base === null) {
+    reasons.push('叠放目标不明确：请给这一行指定格位，或在规则处理段加一行「旧怪兽 → 超量素材」')
+    return placeSlot(slots.field, name, move.slot, count)
+  }
+
+  // 旧怪兽离场（同名也是另一张卡，照样送墓），素材先接住再转到新位置
+  const occupant = slots.field[base]
+  if (occupant) {
+    takeCard(ledger.field, occupant, 1)
+    addCard(ledger.gy, occupant, 1)
+  }
+  const inherited = slots.materials[base]
+  slots.field[base] = null
+  slots.materials[base] = []
+  slots.positions[base] = 'attack'
+
+  // 新怪兽放哪：显式格位 > 旧怪兽腾出来的位置
+  const dest = explicit ?? base
+  if (slots.field[dest]) {
+    const other = slots.field[dest] as string
+    takeCard(ledger.field, other, 1)
+    addCard(ledger.gy, other, 1)
+    // 被顶掉的怪兽自己的素材送墓
+    dumpMaterials(slots, ledger, [dest])
+    slots.positions[dest] = 'attack'
+  }
+  slots.field[dest] = name
+  for (const material of inherited) attachMaterials(slots, dest, material, 1)
+  return [dest]
+}
+
+/**
+ * 怪兽即将落地时，先算出素材要叠到哪个格位：
+ * 显式格位 > 本时序主卡已在场的格位 > 叠放目标 > 第一个空位
+ * （即将被收为素材的怪兽算作空位，所以超量召唤不会因为“怪兽区放不下”而失败）
+ */
+function projectedFieldSlot(
+  slots: Slots,
+  move: CardMove,
+  cardName: string,
+  flow: MaterialFlow,
+): number | null {
+  if (move.overlay) return overlayTarget(slots, move, flow.baseSlot)
+  const fixed = slotIndex(move.slot)
+  if (fixed !== null) return fixed
+  const own = cardName ? slots.field.indexOf(cardName) : -1
+  if (own >= 0) return own
+  const freeing = new Set<string>()
+  for (const item of flow.pending) {
+    if (item.move.from === 'field' && !item.move.unknown) freeing.add(item.move.cardName)
+  }
+  for (let i = 0; i < SLOT_COUNT; i += 1) {
+    const name = slots.field[i]
+    if (!name || freeing.has(name)) return i
+  }
+  return null
+}
+
+/** 把先记下的素材从原区域收走，叠到目标格位的怪兽下面 */
+function flushMaterials(
+  ledger: Ledger,
+  slots: Slots,
+  flow: MaterialFlow,
+  target: number | null,
+  reasons: string[],
+) {
+  const pending = flow.pending
+  if (!pending.length) return
+  if (target === null) {
+    for (const item of pending) {
+      const name = item.move.unknown ? UNKNOWN_CARD : item.move.cardName
+      reasons.push(`「${name || '素材'}」没有可叠放的怪兽，已留在原区域`)
+    }
+    pending.length = 0
+    return
+  }
+  // 先全部从原区域收走，再统一叠上去：素材本身占了目标格位时，
+  // 撤走它会顺带清掉这个格位上的素材列表，边收边叠会把刚叠上去的素材冲掉
+  const sources: number[] = []
+  for (const item of pending) {
+    const unknown = Boolean(item.move.unknown)
+    const key = unknown ? UNKNOWN_CARD : item.move.cardName
+    const sourceSlot = item.move.from === 'field' ? slots.field.indexOf(key) : -1
+    takeFromLedger(ledger, item.move.from, key, item.count, unknown, reasons)
+    leaveSlots(ledger, slots, item.move.from, key, item.count, flow.inherit ? target : undefined)
+    if (flow.inherit && sourceSlot >= 0) sources.push(sourceSlot)
+  }
+  for (const item of pending) {
+    attachMaterials(slots, target, item.move.unknown ? UNKNOWN_CARD : item.move.cardName, item.count)
+  }
+  if (flow.inherit && flow.baseSlot === null && sources.length) flow.baseSlot = sources[0]
+  pending.length = 0
+}
+
 function applyMove(
   ledger: Ledger,
   slots: Slots,
@@ -270,22 +544,70 @@ function applyMove(
   trackLinks: boolean,
   negateTags: string[],
   reasons: string[],
+  flow: MaterialFlow,
 ): number {
   const count = move.count && move.count > 0 ? move.count : 1
   const from = move.from
+  const to = move.to
   const tracked = TRACKED_ZONES.includes(from)
   const unknown = Boolean(move.unknown)
   // 未知卡片共用一个占位 key，不参与按卡名连链
   const key = unknown ? UNKNOWN_CARD : move.cardName
 
-  if (from === 'deck' || from === 'extra') {
-    takeCard(ledger[from], key, count)
-  } else if (tracked) {
-    if (!takeCard(ledger[from], key, count)) {
-      reasons.push(`${unknown ? UNKNOWN_CARD : `「${key}」`}不足（${ZONE_LABELS[from]}），已按可用处理`)
+  // 作为超量素材：从原区域叠到某只怪兽下面（怪物还没落地时先挂起）
+  if (to === 'material') {
+    const target = attachTarget(slots, move.slot, timing.cardName)
+    if (target === null) {
+      flow.pending.push({ move, count })
+      return 0
     }
+    const sourceSlot = from === 'field' ? slots.field.indexOf(key) : -1
+    takeFromLedger(ledger, from, key, count, unknown, reasons)
+    // 叠放时序里把怪兽叠成素材：它自己的素材要继承下来，而不是送墓
+    leaveSlots(ledger, slots, from, key, count, flow.inherit ? target : undefined)
+    attachMaterials(slots, target, key, count)
+    if (flow.inherit && sourceSlot >= 0 && flow.baseSlot === null) flow.baseSlot = sourceSlot
+    return 0
   }
-  if (isSlotZone(from)) clearSlot(slots[from], key, count)
+
+  // 取除超量素材：那只怪兽 → 墓地 / 除外 / 手卡……
+  if (from === 'material') {
+    const order = detachOrder(slots, move.slot, timing.cardName)
+    // 按卡名取：优先取用户指定的那张
+    const take = (match: (name: string) => boolean): string[] => {
+      const taken: string[] = []
+      for (const index of order) {
+        const pool = slots.materials[index]
+        for (let i = pool.length - 1; i >= 0 && taken.length < count; i -= 1) {
+          if (!match(pool[i])) continue
+          taken.push(...pool.splice(i, 1))
+        }
+        if (taken.length >= count) break
+      }
+      return taken
+    }
+    let removed: string[] = []
+    if (unknown || !key) removed = take(() => true)
+    else removed = take((name) => name === key)
+    // 指定了具体素材却找不到时，规则占位行退化为「取最上面一张」
+    if (!removed.length && move.auto) removed = take(() => true)
+    if (!removed.length) {
+      reasons.push(
+        `${unknown ? UNKNOWN_CARD : `「${key || '超量素材'}」`}不在超量素材中（${
+          slotIndex(move.slot) !== null ? `${slotIndex(move.slot)! + 1} 号位` : '场上'
+        }），已跳过`,
+      )
+      return 0
+    }
+    for (const name of removed) {
+      addCard(ledger[to], name, 1)
+      if (isSlotZone(to)) placeSlot(slots[to], name, move.slot, 1)
+    }
+    return 0
+  }
+
+  takeFromLedger(ledger, from, key, count, unknown, reasons)
+  leaveSlots(ledger, slots, from, key, count)
 
   // 使用上游产出的卡 → 记一条链（必须来自同一个区域，避免同名卡错连）
   if (trackLinks && tracked && !unknown) {
@@ -300,24 +622,40 @@ function applyMove(
         fromMoveId: source.moveId,
         toMoveId: move.id,
         cardName: key,
-        to: move.to,
-        kind: linkKindOf(source.from, move.to),
+        to,
+        kind: linkKindOf(source.from, to),
         handtraps: source.handtraps,
         broken: false,
       })
     }
   }
 
-  addCard(ledger[move.to], key, count)
-  if (isSlotZone(move.to)) placeSlot(slots[move.to], key, move.slot, count)
+  addCard(ledger[to], key, count)
+  if (to === 'field') {
+    // 素材先收下来叠好：它们腾出的格位正好给这只怪兽，超量召唤不会因“怪兽区已满”失败
+    if (flow.pending.length) {
+      flushMaterials(
+        ledger,
+        slots,
+        flow,
+        projectedFieldSlot(slots, move, timing.cardName, flow),
+        reasons,
+      )
+    }
+    const placedAt = placeFieldCard(ledger, slots, key, move, count, flow.baseSlot, reasons)
+    const position = move.position || 'attack'
+    for (const index of placedAt) slots.positions[index] = position
+  } else if (to === 'st') {
+    placeSlot(slots.st, key, move.slot, count)
+  }
 
-  if (trackLinks && !unknown && TRACKED_ZONES.includes(move.to)) {
+  if (trackLinks && !unknown && TRACKED_ZONES.includes(to)) {
     origin.set(key, {
       timingId: timing.id,
       timingIndex,
       moveId: move.id,
-      zone: move.to,
-      from: move.from,
+      zone: to,
+      from,
       handtraps: effectiveTags(move, negateTags),
     })
   }
@@ -341,6 +679,13 @@ function run(combo: ComboLine, opts: RunOptions): RunResult {
     let activated = before
     const reasons: string[] = []
     let status: TimingStatus = 'ok'
+    /** 本时序的超量素材处理状态（挂起、叠放继承、叠放目标） */
+    const flow: MaterialFlow = {
+      pending: [],
+      // 本时序有「在超量怪兽上叠放」：被叠成素材的怪兽，它的素材要继承下来
+      inherit: timing.effect.some((move) => move.overlay && move.to === 'field'),
+      baseSlot: null,
+    }
 
     /**
      * 同一阶段的移动一起落账、只产一帧：
@@ -356,7 +701,19 @@ function run(combo: ComboLine, opts: RunOptions): RunResult {
     ) => {
       if (!moves.length) return
       for (const move of moves) {
-        summons += applyMove(ledger, slots, origin, move, timing, index, links, trackLinks, tags, reasons)
+        summons += applyMove(
+          ledger,
+          slots,
+          origin,
+          move,
+          timing,
+          index,
+          links,
+          trackLinks,
+          tags,
+          reasons,
+          flow,
+        )
       }
       frames.push({
         id: `${timing.id}:${phase}`,
@@ -429,8 +786,9 @@ function run(combo: ComboLine, opts: RunOptions): RunResult {
         }
       }
 
-      // 4. 发动处理（手卡 → 魔陷区）：规则处理，必定发生
-      applyPhase(timing.setup, 'setup', '发动处理', opts.trackLinks, [])
+      // 4. 前置处理（发动置入魔陷区 / 额外卡组召唤的素材）：规则处理，必定发生
+      const setupLabel = timing.operation === 'specialSummon' ? '召唤素材' : '发动处理'
+      applyPhase(timing.setup, 'setup', setupLabel, opts.trackLinks, [])
 
       // 5. cost 必定成功（即使效果随后被无效）
       applyPhase(timing.cost, 'cost', '支付 cost', opts.trackLinks, [])
@@ -471,6 +829,9 @@ function run(combo: ComboLine, opts: RunOptions): RunResult {
 
       // 9. 结算后（魔陷区 → 墓地 / 额外）：规则处理，效果被无效也照常
       applyPhase(timing.settle, 'settle', '结算后去向', opts.trackLinks, [])
+
+      // 10. 场景里没有怪兽落地：挂起的素材留在原区域（记一条说明）
+      flushMaterials(ledger, slots, flow, null, reasons)
     }
 
     if (status === 'broken') brokenTimings.add(timing.id)

@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import type { CardData, CardMove, Timing, ZoneId } from '@/types'
-import { OPERATION_DEFS, ZONE_LABELS, ZONE_ORDER } from '@/types'
-import { autoRuleMoves, inferTiming, reuseAutoIds, uid, type RuleMoves } from '@/lib/infer'
+import { OPERATION_DEFS, POSITION_LABELS, ZONE_LABELS, ZONE_ORDER } from '@/types'
+import { autoRuleMoves, inferTiming, materialCount, reuseAutoIds, uid, type RuleMoves } from '@/lib/infer'
 import { useCardStore } from '@/stores/cards'
 import { useComboStore } from '@/stores/combos'
 import { useHandtrapStore } from '@/stores/handtraps'
@@ -91,23 +91,28 @@ function chooseCategory(next: Category) {
 }
 
 function pickCard(target: CardData) {
-  const inferred = inferTiming(target)
-  const targetCategory = categoryOf(inferred.operation)
+  // 操作类型与区域完全沿用用户的选择，只按卡名 / 卡种补默认的规则与效果段
+  const inferred = inferTiming(target, { kind: category.value || undefined })
   draft.value = {
     ...draft.value,
     cardId: target.id,
     cardName: target.name,
-    operation: inferred.operation,
-    from: inferred.from,
     setup: inferred.setup,
     cost: inferred.cost,
     effect: inferred.effect,
     settle: inferred.settle,
-    handtraps: inferred.handtraps,
   }
-  if (targetCategory) category.value = targetCategory
+  // 还没选过操作类别时（正常流程不会走到），才采用推断结果
+  if (!category.value) {
+    const targetCategory = categoryOf(inferred.operation)
+    if (targetCategory) category.value = targetCategory
+    draft.value.operation = inferred.operation
+    draft.value.from = inferred.from
+  }
   hints.value = inferred.hints
   showPicker.value = false
+  // 规则段按用户选定的操作 / 区域重算，手写的效果段保留
+  regenerateAuto(false)
 }
 
 /** 规则自动生成的移动（phase === 'auto' 或带 auto 标记） */
@@ -140,9 +145,8 @@ const upstreamOptions = computed<UpstreamOption[]>(() => {
       if (!move.cardName) continue
       out.push({
         key: `${timing.id}:${move.id}`,
-        label: `第 ${index + 1} 时序「${timing.cardName || timing.label || '未命名'}」· ${
-          move.cardName
-        } ${ZONE_LABELS[move.from]} → ${ZONE_LABELS[move.to]}`,
+        label: `第 ${index + 1} 时序「${timing.cardName || timing.label || '未命名'}」· ${move.cardName
+          } ${ZONE_LABELS[move.from]} → ${ZONE_LABELS[move.to]}`,
       })
     }
   })
@@ -169,17 +173,48 @@ const linkKey = computed({
 const isActivation = computed(
   () => draft.value.operation === 'activate' || draft.value.operation === 'activateEffect',
 )
-const showAuto = computed(
-  () => isActivation.value || draft.value.setup.length > 0 || draft.value.settle.length > 0,
+/** 召唤 / 盖放类操作同样有必定发生的处理（素材、置入、结算去向），要给牌手留出配置入口 */
+const SUMMON_OPS: Timing['operation'][] = ['normalSummon', 'tributeSummon', 'specialSummon', 'set']
+const isSummonOp = computed(() => SUMMON_OPS.includes(draft.value.operation))
+const isSpellTrapCard = computed(
+  () => card.value?.frame === 'spell' || card.value?.frame === 'trap',
 )
+/** 前置处理段：发动置入 / 召唤素材 / 其他强制处理 */
+const showSetupAuto = computed(
+  () => isActivation.value || isSummonOp.value || draft.value.setup.length > 0,
+)
+/** 结算后去向只对发动类操作有意义，召唤类只在已有行时显示 */
+const showSettleAuto = computed(() => isActivation.value || draft.value.settle.length > 0)
+const setupTitle = computed(() => {
+  if (isActivation.value || (draft.value.operation === 'specialSummon' && isSpellTrapCard.value)) {
+    return '规则处理 · 发动置入（必定发生）'
+  }
+  if (draft.value.operation === 'specialSummon' && draft.value.from === 'extra') {
+    return '规则处理 · 召唤素材（必定发生）'
+  }
+  return '规则处理 · 前置处理（必定发生）'
+})
 
 function describeRules(rules: RuleMoves): string[] {
   const out: string[] = []
-  if (rules.setup.length) out.push('发动时置入魔陷区')
+  const materials = rules.setup.filter((move) => move.to !== 'st')
+  if (rules.setup.length > materials.length) out.push('发动时置入魔陷区')
+  if (materials.length) {
+    const move = materials[0]
+    const need = materialCount(card.value)
+    const tail =
+      move.to === 'material' ? '叠在这只怪兽下面' : '一行一张，可改成除外 / 超量素材'
+    out.push(
+      `已生成召唤素材：${ZONE_LABELS[move.from]} → ${ZONE_LABELS[move.to]}（通常需 ${need} 只，${tail}）`,
+    )
+  }
+  const detach = rules.cost.filter((move) => move.from === 'material')
+  if (detach.length) out.push('超量怪兽发动效果：取除素材已记入 cost')
   if (draft.value.operation === 'tributeSummon' && rules.cost.length) out.push('祭品解放已记入 cost')
   if (rules.effect.length) {
     const move = rules.effect[0]
-    out.push(`已生成主移动：${ZONE_LABELS[move.from]} → ${ZONE_LABELS[move.to]}`)
+    const position = move.position && move.position !== 'attack' ? `（${POSITION_LABELS[move.position]}）` : ''
+    out.push(`已生成主移动：${ZONE_LABELS[move.from]} → ${ZONE_LABELS[move.to]}${position}`)
   }
   if (rules.settle.some((move) => move.to === 'extra')) out.push('结算后表侧加入额外卡组')
   else if (rules.settle.length) out.push('结算后送去墓地')
@@ -265,12 +300,7 @@ const toneStyle = (id: string) => {
       <div class="modal-body">
         <!-- 第一步：先选操作来源 -->
         <div v-if="!category" class="op-choice">
-          <button
-            v-for="key in CATEGORIES"
-            :key="key"
-            class="op-choice-card"
-            @click="chooseCategory(key)"
-          >
+          <button v-for="key in CATEGORIES" :key="key" class="op-choice-card" @click="chooseCategory(key)">
             <span class="op-choice-title">{{ CATEGORY_META[key].title }}</span>
             <span class="op-choice-desc">{{ CATEGORY_META[key].desc }}</span>
             <span class="op-choice-examples">{{ CATEGORY_META[key].examples }}</span>
@@ -289,11 +319,8 @@ const toneStyle = (id: string) => {
           </div>
 
           <div class="row" style="gap: 12px; align-items: flex-start; margin-top: 10px">
-            <button
-              class="btn ghost"
-              style="padding: 6px; width: 68px; height: 94px; overflow: hidden; flex: none"
-              @click="showPicker = true"
-            >
+            <button class="btn ghost" style="padding: 6px; width: 68px; height: 94px; overflow: hidden; flex: none"
+              @click="showPicker = true">
               <img v-if="thumb" :src="thumb" :alt="draft.cardName" style="width: 100%; border-radius: 6px" />
               <span v-else style="font-size: 11px; color: var(--text-mute)">选择卡片</span>
             </button>
@@ -302,11 +329,8 @@ const toneStyle = (id: string) => {
                 {{ requiresCard ? '主卡 / 操作对象' : '操作对象（可选）' }}
               </div>
               <div class="row" style="margin-top: 5px; gap: 6px">
-                <input
-                  v-model="draft.cardName"
-                  class="input"
-                  :placeholder="requiresCard ? '卡片名称' : '留空则只记录动作，例如「抽卡」'"
-                />
+                <input v-model="draft.cardName" class="input"
+                  :placeholder="requiresCard ? '卡片名称' : '留空则只记录动作，例如「抽卡」'" />
                 <button class="btn sm" @click="showPicker = true">选择</button>
               </div>
               <div class="inline-note" style="margin-top: 5px">
@@ -358,13 +382,20 @@ const toneStyle = (id: string) => {
 
           <div class="divider" />
 
-          <template v-if="showAuto">
+          <template v-if="showSetupAuto">
             <div class="row" style="align-items: center; gap: 8px; margin-bottom: 6px">
-              <div class="label" style="margin: 0">规则处理 · 发动置入（必定发生）</div>
+              <div class="label" style="margin: 0">{{ setupTitle }}</div>
               <span class="grow" />
               <button class="btn xs ghost" @click="regenerateAuto()">重新生成</button>
             </div>
             <MoveRows v-model="draft.setup" phase="auto" :operation="draft.operation" :from="draft.from" />
+            <div v-if="draft.operation === 'specialSummon'" class="inline-note" style="margin-top: 4px">
+              {{
+                draft.from === 'extra'
+                  ? '额外卡组召唤的素材记在这里：一行一张，区域可改成墓地 / 除外 / 超量素材；多只素材点「＋ 处理段」继续加。'
+                  : '特殊召唤的素材 / 解放 / 强制处理也记在这里：必定发生，不吃手坑。'
+              }}
+            </div>
 
             <div class="divider" />
           </template>
@@ -376,8 +407,15 @@ const toneStyle = (id: string) => {
 
           <div class="label" style="margin-bottom: 6px">效果段（按结算顺序，可逐段标手坑）</div>
           <MoveRows v-model="draft.effect" phase="effect" :operation="draft.operation" :from="draft.from" />
+          <div
+            v-if="draft.operation === 'specialSummon' && draft.from === 'extra'"
+            class="inline-note"
+            style="margin-top: 4px"
+          >
+            在超量怪兽上叠放：给召唤这一行勾选「叠放」；叠谁看规则处理段的「旧怪兽 → 超量素材」行（或该格位上的怪兽），格位填新怪兽要放的位置。旧怪兽送墓，素材由新怪兽继承。
+          </div>
 
-          <template v-if="showAuto">
+          <template v-if="showSettleAuto">
             <div class="divider" />
 
             <div class="label" style="margin-bottom: 6px">规则处理 · 结算后去向（去墓地 / 额外，或留场）</div>
@@ -388,14 +426,10 @@ const toneStyle = (id: string) => {
 
           <div class="label" style="margin-bottom: 6px">时序级响应（不挂在某一段上的手坑）</div>
           <div class="row wrap" style="gap: 5px">
-            <button
-              v-for="def in ht.defs"
-              :key="def.id"
-              class="chip clickable"
+            <button v-for="def in ht.defs" :key="def.id" class="chip clickable"
               :class="{ on: draft.handtraps?.includes(def.id) }"
               :style="draft.handtraps?.includes(def.id) ? toneStyle(def.id) : undefined"
-              @click="toggleTimingHandtrap(def.id)"
-            >
+              @click="toggleTimingHandtrap(def.id)">
               {{ def.name }}
             </button>
           </div>

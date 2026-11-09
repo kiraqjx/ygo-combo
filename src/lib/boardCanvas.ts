@@ -21,6 +21,8 @@ export interface BoardFramePaint {
   imageOf?: (name: string) => CanvasImageSource | null
   /** 卡片角标：连锁发动时在对应卡片上标 C2 / C3 */
   badges?: { name: string; label: string; zone?: ZoneId | null }[]
+  /** 里侧表示用的标准卡背图；取不到就画成渐变卡背 */
+  cardBack?: CanvasImageSource | null
 }
 
 const PAD = 12
@@ -33,6 +35,13 @@ const SLOT_ROWS = 2
 const SLOTS_PER_ROW = 5
 const MINI_W = 26
 const HAND_W = 40
+
+/* 十字卡位（与 style.css 的 .duel-slot 同一套比例）：横竖两臂等长 */
+const CROSS_ARM = 0.718
+const CROSS_INSET = 0.016
+/** 卡在十字竖臂里的占比，421:614 正好落在臂内 */
+const CARD_W = 0.642
+const CARD_H = 0.936
 
 const C = {
   bg: '#0d1117',
@@ -80,7 +89,8 @@ export function layoutBoard(width = 480): BoardLayout {
   const inner = width - PAD * 2
   const slotRoom = inner - LABEL_W - COUNT_W - GAP * 2
   const slotW = Math.max(40, Math.min(96, Math.floor((slotRoom - GAP * (SLOTS_PER_ROW - 1)) / SLOTS_PER_ROW)))
-  const slotH = Math.round(slotW * CARD_RATIO)
+  // 十字卡位横竖两臂等长，所以格子是正方形
+  const slotH = slotW
   const miniH = Math.round(MINI_W * CARD_RATIO)
   const handCardH = Math.round(HAND_W * CARD_RATIO)
 
@@ -231,6 +241,35 @@ function drawBadge(
   ctx.restore()
 }
 
+/** 超量素材数量角标：画在怪兽卡左下角 */
+function drawMaterialBadge(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  count: number,
+) {
+  if (!count) return
+  const label = `素材×${count}`
+  const size = Math.max(7, Math.min(9, Math.round(w / 11)))
+  ctx.save()
+  ctx.font = font(size, 700)
+  const bw = Math.min(w - 6, ctx.measureText(label).width + 8)
+  const bh = size + 4
+  rr(ctx, x + 3, y + h - bh - 3, bw, bh, 3)
+  ctx.fillStyle = 'rgba(8, 10, 16, 0.78)'
+  ctx.fill()
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.18)'
+  ctx.lineWidth = 1
+  ctx.stroke()
+  ctx.fillStyle = C.text
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(label, x + 3 + bw / 2, y + h - bh / 2 - 3)
+  ctx.restore()
+}
+
 /** 展开 ×N，方便按格位摆放 */
 function expand(cards: ZoneCard[] = []): string[] {
   const out: string[] = []
@@ -325,7 +364,7 @@ function drawImageCard(
   ctx.fillRect(x, y, w, h)
   drawCover(ctx, image, x, y, w, h)
 
-  if (w >= 52) {
+  if (w >= 44) {
     const stripH = Math.min(15, Math.round(h * 0.2))
     ctx.fillStyle = 'rgba(0, 0, 0, 0.62)'
     ctx.fillRect(x, y + h - stripH, w, stripH)
@@ -345,19 +384,101 @@ function drawImageCard(
   ctx.restore()
 }
 
-function drawEmptySlot(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
+/** 里侧守备：优先画标准卡背图，取不到才退回渐变卡背 */
+function drawCardBack(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  highlight: boolean,
+  back: CanvasImageSource | null,
+) {
+  const cx = x + w / 2
+  const cy = y + h / 2
+  const landscape = w > h
+
+  if (back) {
+    ctx.save()
+    // 卡背图是竖版，横置时整张转 90°，否则会被裁成中间一条
+    if (landscape) {
+      ctx.translate(cx, cy)
+      ctx.rotate(-Math.PI / 2)
+      ctx.translate(-cx, -cy)
+    }
+    const rw = landscape ? h : w
+    const rh = landscape ? w : h
+    const rx = cx - rw / 2
+    const ry = cy - rh / 2
+    rr(ctx, rx, ry, rw, rh, 5)
+    ctx.clip()
+    ctx.fillStyle = '#1b1630'
+    ctx.fillRect(rx, ry, rw, rh)
+    drawCover(ctx, back, rx, ry, rw, rh)
+    ctx.restore()
+  } else {
+    ctx.save()
+    rr(ctx, x, y, w, h, 5)
+    ctx.clip()
+    ctx.fillStyle = '#1b1630'
+    ctx.fillRect(x, y, w, h)
+    const grad = ctx.createLinearGradient(x, y, x + w, y + h)
+    grad.addColorStop(0, 'rgba(120, 90, 200, 0.5)')
+    grad.addColorStop(1, 'rgba(18, 14, 30, 0.95)')
+    ctx.fillStyle = grad
+    ctx.fillRect(x, y, w, h)
+    ctx.restore()
+
+    ctx.save()
+    ctx.beginPath()
+    ctx.arc(cx, cy, Math.min(w, h) * 0.22, 0, Math.PI * 2)
+    ctx.strokeStyle = 'rgba(201, 166, 255, 0.35)'
+    ctx.lineWidth = 1
+    ctx.stroke()
+    ctx.restore()
+  }
+
   ctx.save()
   rr(ctx, x, y, w, h, 5)
-  ctx.fillStyle = C.empty
-  ctx.fill()
-  ctx.setLineDash([3, 3])
-  ctx.strokeStyle = C.line
-  ctx.lineWidth = 1
+  ctx.lineWidth = highlight ? 2 : 1
+  ctx.strokeStyle = highlight ? C.gold : 'rgba(163, 113, 247, 0.6)'
   ctx.stroke()
-  ctx.setLineDash([])
+  ctx.restore()
+}
+
+/** 十字路径：arm 是臂宽占格子的比例，inset 是四条边整体向内收缩的比例 */
+function crossPath(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  size: number,
+  arm: number,
+  inset: number,
+) {
+  const band = size * (arm - inset * 2)
+  const span = size * (1 - inset * 2)
+  const cx = x + size / 2
+  const cy = y + size / 2
   ctx.beginPath()
-  ctx.arc(x + w / 2, y + h / 2, 2, 0, Math.PI * 2)
-  ctx.fillStyle = C.line
+  ctx.rect(cx - band / 2, cy - span / 2, band, span)
+  ctx.rect(cx - span / 2, cy - band / 2, span, band)
+}
+
+/** 卡位：外圈描边 + 内圈底色，中间留出 1.6% 的边框 */
+function drawSlotFrame(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  size: number,
+  line: string,
+  fill: string,
+) {
+  ctx.save()
+  crossPath(ctx, x, y, size, CROSS_ARM, 0)
+  ctx.fillStyle = line
+  ctx.fill()
+  crossPath(ctx, x, y, size, CROSS_ARM, CROSS_INSET)
+  ctx.fillStyle = fill
   ctx.fill()
   ctx.restore()
 }
@@ -378,6 +499,7 @@ function drawSlotRow(
   kindOf: (name: string) => CardKind,
   imageOf: (name: string) => CanvasImageSource | null,
   badgeOf: (zone: ZoneId, name: string) => string,
+  back: CanvasImageSource | null,
 ) {
   const items = slotNames(cards, slots)
   const rowX = l.slotsX
@@ -398,15 +520,53 @@ function drawSlotRow(
 
   for (let i = 0; i < SLOTS_PER_ROW; i += 1) {
     const x = rowX + i * (l.slotW + GAP)
+    const size = l.slotW
     const name = items[i]
+    const filled = Boolean(name)
+    drawSlotFrame(ctx, x, rowY, size, highlight ? C.gold : filled ? '#3d444d' : C.line, filled ? 'rgba(0, 0, 0, 0.16)' : C.empty)
+
     if (!name) {
-      drawEmptySlot(ctx, x, rowY, l.slotW, l.slotH)
+      ctx.save()
+      ctx.beginPath()
+      ctx.arc(x + size / 2, rowY + size / 2, 2, 0, Math.PI * 2)
+      ctx.fillStyle = C.line
+      ctx.fill()
+      ctx.restore()
       continue
     }
+
+    const slotCard = zone === 'field' ? slots?.find((card) => card?.name === name) || null : null
+    const position = slotCard?.position || 'attack'
     const image = imageOf(name)
-    if (image) drawImageCard(ctx, x, rowY, l.slotW, l.slotH, name, image, highlight)
-    else drawCard(ctx, x, rowY, l.slotW, l.slotH, name, kindOf(name), highlight)
-    drawBadge(ctx, x, rowY, l.slotW, l.slotH, badgeOf(zone, name))
+
+    // 卡落在十字的竖臂里；守备 / 里侧时横过来落在横臂里
+    const cw = size * CARD_W
+    const ch = size * CARD_H
+    const landscape = position !== 'attack'
+    const boxW = landscape ? size * CARD_H : cw
+    const boxH = landscape ? size * CARD_W : ch
+    const boxX = x + (size - boxW) / 2
+    const boxY = rowY + (size - boxH) / 2
+
+    if (position === 'set') {
+      drawCardBack(ctx, boxX, boxY, boxW, boxH, highlight, back)
+    } else if (position === 'defense') {
+      ctx.save()
+      ctx.translate(x + size / 2, rowY + size / 2)
+      ctx.rotate(-Math.PI / 2)
+      if (image) drawImageCard(ctx, -cw / 2, -ch / 2, cw, ch, name, image, highlight)
+      else drawCard(ctx, -cw / 2, -ch / 2, cw, ch, name, kindOf(name), highlight)
+      ctx.restore()
+    } else if (image) {
+      drawImageCard(ctx, boxX, boxY, boxW, boxH, name, image, highlight)
+    } else {
+      drawCard(ctx, boxX, boxY, boxW, boxH, name, kindOf(name), highlight)
+    }
+
+    drawBadge(ctx, boxX, boxY, boxW, boxH, badgeOf(zone, name))
+    if (zone === 'field') {
+      drawMaterialBadge(ctx, boxX, boxY, boxW, boxH, slotCard?.materials?.length || 0)
+    }
   }
 }
 
@@ -582,6 +742,7 @@ export function drawBoardFrame(
     kindOf,
     imageOf,
     badgeOf,
+    paint.cardBack || null,
   )
   drawSlotRow(
     ctx,
@@ -595,6 +756,7 @@ export function drawBoardFrame(
     kindOf,
     imageOf,
     badgeOf,
+    paint.cardBack || null,
   )
 
   // 资源区

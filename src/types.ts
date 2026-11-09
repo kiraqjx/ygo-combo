@@ -28,7 +28,7 @@ export interface CardData {
 /* 区域                                                                 */
 /* ------------------------------------------------------------------ */
 
-export type ZoneId = 'hand' | 'deck' | 'extra' | 'gy' | 'banish' | 'field' | 'st'
+export type ZoneId = 'hand' | 'deck' | 'extra' | 'gy' | 'banish' | 'field' | 'st' | 'material'
 
 export const ZONE_LABELS: Record<ZoneId, string> = {
   hand: '手卡',
@@ -38,10 +38,11 @@ export const ZONE_LABELS: Record<ZoneId, string> = {
   banish: '除外',
   field: '场上',
   st: '魔陷区',
+  material: '超量素材',
 }
 
 /** 展示顺序：从最"可见"到最"隐藏" */
-export const ZONE_ORDER: ZoneId[] = ['hand', 'field', 'st', 'gy', 'banish', 'extra', 'deck']
+export const ZONE_ORDER: ZoneId[] = ['hand', 'field', 'st', 'material', 'gy', 'banish', 'extra', 'deck']
 
 /** 会被"某张卡从哪来"校验的区域 */
 export const TRACKED_ZONES: ZoneId[] = ['hand', 'field', 'st', 'gy', 'banish']
@@ -51,6 +52,15 @@ export const UNKNOWN_CARD = '未知卡片'
 
 /** 怪兽区 / 魔陷区的格位数（1-5 号位） */
 export const SLOT_COUNT = 5
+
+/** 怪兽在场上的表示形式：表侧攻击 / 表侧守备 / 里侧守备（盖放） */
+export type BattlePosition = 'attack' | 'defense' | 'set'
+
+export const POSITION_LABELS: Record<BattlePosition, string> = {
+  attack: '攻击表示',
+  defense: '守备表示',
+  set: '里侧守备',
+}
 
 /** 目前只记录我方操作 */
 
@@ -90,8 +100,21 @@ export interface CardMove {
   from: ZoneId
   to: ZoneId
   phase: MovePhase
-  /** 落到怪兽区 / 魔陷区时指定的格位（1-5），留空则自动顺排空位 */
+  /**
+   * 落到怪兽区 / 魔陷区时指定的格位（1-5），留空则自动顺排空位；
+   * from / to 为「超量素材」时，表示素材挂在几号位怪兽下面。
+   */
   slot?: number
+  /**
+   * 叠放（仅 to === 'field'）：盖到该格位已有的怪兽上，继承它的超量素材，
+   * 旧怪兽送去墓地。用于「在超量怪兽上叠放」这类召唤。
+   */
+  overlay?: boolean
+  /**
+   * 表示形式（仅 to === 'field'）：表侧攻击 / 表侧守备 / 里侧守备。
+   * 留空按攻击表示；盖放怪兽用 'set'。
+   */
+  position?: BattlePosition
   /** 由规则自动生成（切换操作 / 区域 / 卡片时会重新计算，不会动用户手写的段） */
   auto?: boolean
   /** 这一段可被哪些手坑阻止（cost 段不使用） */
@@ -202,12 +225,18 @@ export interface Combo {
 export interface ZoneCard {
   name: string
   count: number
+  /** 怪兽区格位专用：叠在这只怪兽下面的超量素材（卡名，可重复） */
+  materials?: string[]
+  /** 怪兽区格位专用：表示形式 */
+  position?: BattlePosition
 }
 
 export interface ZoneSnapshot {
   hand: ZoneCard[]
   field: ZoneCard[]
   st: ZoneCard[]
+  /** 场上全部超量素材的汇总（真正归属见 fieldSlots[].materials） */
+  material: ZoneCard[]
   /** 怪兽区按格位摆放（下标 = 格位 - 1），决斗盘按格位渲染 */
   fieldSlots: (ZoneCard | null)[]
   /** 魔陷区按格位摆放（下标 = 格位 - 1） */

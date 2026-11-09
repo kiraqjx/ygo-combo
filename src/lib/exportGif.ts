@@ -11,6 +11,8 @@ export interface GifExportOptions {
   shouldCancel?: () => boolean
   /** 卡名 → 同源卡图地址；返回 null 表示这张卡没有卡图 */
   imageUrlOf?: (name: string) => string | null
+  /** 里侧表示用的标准卡背图（同源）；取不到就画渐变卡背 */
+  cardBackUrl?: string
 }
 
 const ZONES: ZoneId[] = ['hand', 'field', 'st', 'gy', 'banish', 'extra', 'deck']
@@ -117,6 +119,10 @@ export async function renderBoardGif(
     if (shouldCancel()) return null
   }
 
+  // 1.5 卡背图（里侧表示）；失败就退回 canvas 画的渐变卡背
+  const cardBack = options.cardBackUrl ? await loadImage(options.cardBackUrl) : null
+  if (shouldCancel()) return null
+
   // 2. 逐帧编码
   const gif = GIFEncoder()
   for (let i = 0; i < frames.length; i += 1) {
@@ -126,6 +132,7 @@ export async function renderBoardGif(
       {
         ...frames[i],
         imageOf: (name) => images.get(name) || null,
+        cardBack,
       },
       width,
     )

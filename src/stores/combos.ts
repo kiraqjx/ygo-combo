@@ -87,6 +87,15 @@ function normalizeTiming(raw: Timing): Timing {
     })),
     handtraps: raw.handtraps || [],
   }
+
+  // 规则生成的素材行只保留「哪张卡、从哪到哪」，旧数据里残留的数量 / 说明一并清掉
+  for (const move of timing.setup) {
+    if (move.auto && move.from === 'field' && move.to !== 'st') {
+      delete move.count
+      delete move.note
+    }
+  }
+
   if (timing.setup.length || timing.settle.length) return timing
   if (timing.operation !== 'activate') return timing
 

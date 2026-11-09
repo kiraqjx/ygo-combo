@@ -9,7 +9,7 @@ import type {
   ZoneId,
   ZoneSnapshot,
 } from '@/types'
-import { UNKNOWN_CARD, ZONE_LABELS } from '@/types'
+import { POSITION_LABELS, UNKNOWN_CARD, ZONE_LABELS } from '@/types'
 import { useCardStore } from '@/stores/cards'
 import { useHandtrapStore } from '@/stores/handtraps'
 import DuelField from './DuelField.vue'
@@ -85,7 +85,13 @@ const toneStyle = (id: string) => {
 const moveText = (move: CardMove) => {
   const count = move.count && move.count > 1 ? ` ×${move.count}` : ''
   const name = move.unknown ? `${UNKNOWN_CARD}${count}` : move.cardName || '—'
-  return `${name} ${ZONE_LABELS[move.from]} → ${ZONE_LABELS[move.to]}`
+  const material = move.from === 'material' || move.to === 'material'
+  const position =
+    move.to === 'field' && move.position && move.position !== 'attack'
+      ? `（${POSITION_LABELS[move.position]}）`
+      : ''
+  const extra = `${material && move.slot ? `（${move.slot} 号位）` : ''}${move.overlay ? '（叠放）' : ''}${position}`
+  return `${name} ${ZONE_LABELS[move.from]} → ${ZONE_LABELS[move.to]}${extra}`
 }
 
 /** 每一段移动涉及的卡也带上卡图 */

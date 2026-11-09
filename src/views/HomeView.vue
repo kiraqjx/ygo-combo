@@ -55,7 +55,7 @@ const statCards = computed(() => [
         卡片移动会自动连成链，手坑直接标在链上，断在哪一环、波及到哪一步，一眼可见。
       </p>
       <div class="hero-actions">
-        <RouterLink to="/lab" class="btn primary">进入展开工坊 →</RouterLink>
+        <RouterLink to="/lab" class="btn primary">进入combo工坊 →</RouterLink>
         <RouterLink to="/cards" class="btn">检索卡牌</RouterLink>
         <RouterLink to="/lab" class="btn ghost">查看示例推演</RouterLink>
       </div>

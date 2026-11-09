@@ -29,12 +29,22 @@ const STORAGE_KEY = 'ygo-deck-builder-v2'
 const LEGACY_KEY = 'ygo-deck-builder-v1'
 const DEFAULT_NAME = '我的卡组'
 
+/** 启动率配置：一组启动卡（1-5 张），组与组之间是或关系 */
+export interface StarterGroup {
+  id: string
+  cards: number[]
+}
+
+/** 每组启动卡最多选 5 张 */
+export const MAX_STARTER_CARDS = 5
+
 export interface SavedDeck {
   id: string
   name: string
   main: DeckEntry[]
   extra: DeckEntry[]
   side: DeckEntry[]
+  starters: StarterGroup[]
   updatedAt: number
 }
 
@@ -60,8 +70,23 @@ function normalizeEntries(value: unknown): DeckEntry[] {
   return out
 }
 
+function normalizeStarters(value: unknown): StarterGroup[] {
+  if (!Array.isArray(value)) return []
+  const out: StarterGroup[] = []
+  for (const item of value as Partial<StarterGroup>[]) {
+    const cards = Array.isArray(item?.cards)
+      ? [...new Set((item.cards as unknown[]).map((id) => Number(id)).filter((id) => id > 0))].slice(
+          0,
+          MAX_STARTER_CARDS,
+        )
+      : []
+    out.push({ id: String(item?.id || uid()), cards })
+  }
+  return out
+}
+
 function blankDeck(name = DEFAULT_NAME): SavedDeck {
-  return { id: uid(), name, main: [], extra: [], side: [], updatedAt: Date.now() }
+  return { id: uid(), name, main: [], extra: [], side: [], starters: [], updatedAt: Date.now() }
 }
 
 function normalizeDeck(raw: Partial<SavedDeck>, fallbackName = DEFAULT_NAME): SavedDeck {
@@ -71,6 +96,7 @@ function normalizeDeck(raw: Partial<SavedDeck>, fallbackName = DEFAULT_NAME): Sa
     main: normalizeEntries(raw.main),
     extra: normalizeEntries(raw.extra),
     side: normalizeEntries(raw.side),
+    starters: normalizeStarters(raw.starters),
     updatedAt: Number(raw.updatedAt || Date.now()),
   }
 }
@@ -215,6 +241,7 @@ export const useDeckStore = defineStore('deck', () => {
       main: source.main.map((entry) => ({ ...entry })),
       extra: source.extra.map((entry) => ({ ...entry })),
       side: source.side.map((entry) => ({ ...entry })),
+      starters: source.starters.map((group) => ({ id: uid(), cards: [...group.cards] })),
       updatedAt: Date.now(),
     }
     decks.value.unshift(copy)
@@ -303,6 +330,47 @@ export const useDeckStore = defineStore('deck', () => {
     clear('side')
   }
 
+  /* ---- 启动率配置 ---- */
+
+  function addStarter(): StarterGroup | null {
+    const target = current.value
+    if (!target) return null
+    const group: StarterGroup = { id: uid(), cards: [] }
+    target.starters.push(group)
+    touch()
+    return group
+  }
+
+  function removeStarter(id: string) {
+    const target = current.value
+    if (!target) return
+    target.starters = target.starters.filter((group) => group.id !== id)
+    touch()
+  }
+
+  function findStarter(starterId: string): StarterGroup | undefined {
+    return current.value?.starters.find((group) => group.id === starterId)
+  }
+
+  function addStarterCard(starterId: string, cardId: number): DeckActionResult {
+    const group = findStarter(starterId)
+    if (!group) return { ok: false, message: '启动组合不存在' }
+    if (group.cards.includes(cardId)) return { ok: false, message: '这张卡已经在该启动组合里' }
+    if (group.cards.length >= MAX_STARTER_CARDS) {
+      return { ok: false, message: `每组启动卡最多 ${MAX_STARTER_CARDS} 张` }
+    }
+    group.cards.push(cardId)
+    touch()
+    return { ok: true, message: '已加入启动组合' }
+  }
+
+  function removeStarterCard(starterId: string, cardId: number) {
+    const group = findStarter(starterId)
+    if (!group) return
+    group.cards = group.cards.filter((id) => id !== cardId)
+    touch()
+  }
+
   watch(
     () => ({ decks: decks.value, currentId: currentDeckId.value }),
     (value) => persist(value),
@@ -328,5 +396,9 @@ export const useDeckStore = defineStore('deck', () => {
     remove,
     clear,
     clearAll,
+    addStarter,
+    removeStarter,
+    addStarterCard,
+    removeStarterCard,
   }
 })

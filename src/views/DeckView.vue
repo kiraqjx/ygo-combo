@@ -2,11 +2,12 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import type { CardData, DeckEntry } from '@/types'
 import { useCardStore } from '@/stores/cards'
-import { DECK_SECTIONS, useDeckStore, type DeckSection } from '@/stores/deck'
+import { DECK_SECTIONS, MAX_STARTER_CARDS, useDeckStore, type DeckSection } from '@/stores/deck'
 import { createFilters, searchCards } from '@/lib/search'
 import { cardImageUrl } from '@/lib/cardDb'
 import { downloadText, toast } from '@/lib/toast'
 import { atLeastOneChance, formatChance } from '@/lib/odds'
+import { allPresentChance, atLeastOneStarterChance } from '@/lib/starter'
 import { toYdk } from '@/lib/ydk'
 import {
   exactOneMatch,
@@ -145,6 +146,54 @@ function openSmallWorld() {
   swKeyword.value = ''
   swLimit.value = 150
   swModal.value = true
+}
+
+/* ---- 启动率 ---- */
+
+const starterModal = ref(false)
+const starterDraws = ref(5)
+
+/** 当前卡组配置的启动组合（组与组之间是或关系） */
+const starterGroups = computed(() => deck.current?.starters ?? [])
+
+function starterCopies(id: number): number {
+  return deck.lists.main.find((entry) => entry.id === id)?.count ?? 0
+}
+
+function starterName(id: number): string {
+  return (
+    deck.lists.main.find((entry) => entry.id === id)?.name ||
+    cards.getCard(id)?.name ||
+    `未知卡片 ${id}`
+  )
+}
+
+/** 任意一组启动卡全部上手即算启动成功 */
+const starterRate = computed(() =>
+  atLeastOneStarterChance(
+    deck.counts.main,
+    starterGroups.value.map((group) => group.cards),
+    starterCopies,
+    starterDraws.value,
+  ),
+)
+
+function groupChance(cards: number[]): number {
+  return allPresentChance(deck.counts.main, cards.map(starterCopies), starterDraws.value)
+}
+
+function availableStarterCards(used: number[]): DeckEntry[] {
+  return deck.lists.main.filter((entry) => !used.includes(entry.id))
+}
+
+function onStarterCardPick(starterId: string, event: Event) {
+  const select = event.target as HTMLSelectElement
+  const id = Number(select.value)
+  if (id > 0) {
+    const outcome = deck.addStarterCard(starterId, id)
+    if (!outcome.ok) toast(outcome.message, true)
+  }
+  select.value = ''
 }
 
 /* ---- 模拟起手 ---- */
@@ -355,6 +404,7 @@ function addCard(card: CardData) {
         <button class="btn sm ghost" @click="oddsModal = true">上手概率</button>
         <button class="btn sm ghost" :disabled="!deck.counts.main" @click="openSmallWorld">小世界现象</button>
         <button class="btn sm ghost" :disabled="!deck.counts.main" @click="openHand">模拟起手</button>
+        <button class="btn sm ghost" :disabled="!deck.counts.main" @click="starterModal = true">启动率</button>
         <span class="grow" />
         <span class="inline-note">左键查看效果 · 右键移除 1 张 · Shift+右键移除全部</span>
       </div>
@@ -595,6 +645,80 @@ function addCard(card: CardData) {
         </div>
         <div class="modal-foot">
           <button class="btn ghost" @click="swModal = false">关闭</button>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="starterModal" class="overlay center" @click.self="starterModal = false">
+      <div class="modal" style="width: min(700px, 100%)">
+        <div class="modal-head">
+          <span style="font-size: 14px; font-weight: 600">启动率</span>
+          <button class="icon-btn" @click="starterModal = false">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="starter-summary">
+            <span class="starter-rate">{{ formatChance(starterRate) }}</span>
+            <span class="starter-meta">
+              主卡组 {{ deck.counts.main }} 张 · 抽
+              <input
+                v-model.number="starterDraws"
+                type="number"
+                min="1"
+                :max="deck.counts.main || 1"
+                class="input starter-draws"
+                aria-label="抽卡数"
+              />
+              张起手
+            </span>
+            <span class="starter-bar"><i :style="{ width: `${starterRate * 100}%` }" /></span>
+          </div>
+
+          <div class="inline-note" style="margin-bottom: 10px">
+            任意一组启动卡全部上手即算启动成功（组之间是或关系）；每组可选 1-{{ MAX_STARTER_CARDS }} 张主卡组内的卡。
+          </div>
+
+          <div v-for="(group, index) in starterGroups" :key="group.id" class="starter-group">
+            <div class="starter-head">
+              <span class="starter-title">
+                启动 {{ index + 1 }} · {{ group.cards.length }} / {{ MAX_STARTER_CARDS }}
+              </span>
+              <span class="starter-group-chance">{{ formatChance(groupChance(group.cards)) }}</span>
+              <button class="icon-btn" style="width: 24px; height: 24px" title="删除这一组" @click="deck.removeStarter(group.id)">
+                ✕
+              </button>
+            </div>
+            <div class="starter-chips">
+              <span
+                v-for="id in group.cards"
+                :key="id"
+                class="starter-chip"
+                :class="{ missing: !starterCopies(id) }"
+                :title="starterCopies(id) ? `${starterName(id)} ×${starterCopies(id)}` : '这张卡已不在主卡组'"
+              >
+                {{ starterName(id) }}
+                <button @click="deck.removeStarterCard(group.id, id)">✕</button>
+              </span>
+              <span v-if="!group.cards.length" class="inline-note">还没选卡</span>
+            </div>
+            <select
+              class="select"
+              :disabled="group.cards.length >= MAX_STARTER_CARDS"
+              @change="onStarterCardPick(group.id, $event)"
+            >
+              <option value="">＋ 从主卡组选择一张卡（{{ group.cards.length }} / {{ MAX_STARTER_CARDS }}）</option>
+              <option v-for="entry in availableStarterCards(group.cards)" :key="entry.id" :value="entry.id">
+                {{ entry.name }} ×{{ entry.count }}
+              </option>
+            </select>
+          </div>
+
+          <div v-if="!starterGroups.length" class="empty">还没有配置启动组合</div>
+          <button class="btn ghost sm" style="width: 100%; margin-top: 10px" @click="deck.addStarter()">
+            ＋ 新建启动组合
+          </button>
+        </div>
+        <div class="modal-foot">
+          <button class="btn ghost" @click="starterModal = false">关闭</button>
         </div>
       </div>
     </div>

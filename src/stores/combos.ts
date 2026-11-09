@@ -331,6 +331,15 @@ function cloneTimings(timings: Timing[]): Timing[] {
   return copies
 }
 
+/** 副本重名时补序号：主线 副本 / 主线 副本 2 … */
+function uniqueLineName(combo: Combo, base: string): string {
+  const names = new Set(combo.lines.map((item) => item.name))
+  if (!names.has(base)) return base
+  let index = 2
+  while (names.has(`${base} ${index}`)) index += 1
+  return `${base} ${index}`
+}
+
 function cloneLine(line: ComboLine, name?: string): ComboLine {
   return {
     ...line,
@@ -480,11 +489,23 @@ export const useComboStore = defineStore('combos', () => {
     return next
   }
 
+  /** 复制展开链：紧跟在原链后面新建一条，并把卡组 / 起手 / 目标 / 时序 / 连锁完整复制过去 */
   function duplicateLine(id: string) {
     const combo = current.value
-    const source = combo?.lines.find((item) => item.id === id)
-    if (!combo || !source) return
-    addLine(undefined, source)
+    if (!combo) return null
+    const index = combo.lines.findIndex((item) => item.id === id)
+    if (index < 0) return null
+    const source = combo.lines[index]
+    const next = cloneLine(source, uniqueLineName(combo, `${source.name} 副本`))
+    // 顺序上排在原链及其已有副本之后
+    let insertAt = index + 1
+    while (insertAt < combo.lines.length && combo.lines[insertAt].name.startsWith(`${source.name} 副本`)) {
+      insertAt += 1
+    }
+    combo.lines.splice(insertAt, 0, next)
+    combo.activeLineId = next.id
+    touch()
+    return next
   }
 
   function removeLine(id: string) {

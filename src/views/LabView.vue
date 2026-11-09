@@ -155,9 +155,10 @@ function newLine() {
 }
 
 function duplicateLine() {
-  if (!line.value) return
-  store.duplicateLine(line.value.id)
-  toast('已复制展开链')
+  const source = line.value
+  if (!source) return
+  const next = store.duplicateLine(source.id)
+  toast(next ? `已复制展开链：${next.name}` : '已复制展开链')
 }
 
 function deleteLine() {
@@ -210,7 +211,13 @@ function deleteLine() {
       <button class="btn sm" :disabled="!analysis || !line.timings.length" @click="playback = true">
         ▶ 动态演示
       </button>
-      <button class="btn sm ghost" @click="duplicateLine">复制链</button>
+      <button
+        class="btn sm ghost"
+        title="新建一条展开链，并完整复制当前链（卡组 / 起手 / 目标 / 时序 / 连锁）"
+        @click="duplicateLine"
+      >
+        复制展开链
+      </button>
       <button class="btn sm ghost danger" :disabled="combo.lines.length <= 1" @click="deleteLine">
         删除链
       </button>

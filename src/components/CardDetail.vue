@@ -63,5 +63,9 @@ const desc = computed(() => {
         </p>
       </div>
     </div>
+
+    <div v-if="$slots.actions" class="card-detail-actions">
+      <slot name="actions" />
+    </div>
   </div>
 </template>

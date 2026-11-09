@@ -25,12 +25,16 @@ export async function copyText(text: string, okMessage = '已复制到剪贴板'
   }
 }
 
-export function downloadJson(filename: string, data: unknown) {
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+export function downloadText(filename: string, text: string, type = 'text/plain;charset=utf-8') {
+  const blob = new Blob([text], { type })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
   a.download = filename
   a.click()
   URL.revokeObjectURL(url)
+}
+
+export function downloadJson(filename: string, data: unknown) {
+  downloadText(filename, JSON.stringify(data, null, 2), 'application/json')
 }

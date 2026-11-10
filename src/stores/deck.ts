@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
 import type { CardData, DeckEntry } from '@/types'
 import { uid } from '@/lib/infer'
+import { blankPlan, clonePlan, normalizePlan, type RatePlan } from '@/lib/rates'
 
 export type DeckSection = 'main' | 'extra' | 'side'
 
@@ -45,6 +46,8 @@ export interface SavedDeck {
   extra: DeckEntry[]
   side: DeckEntry[]
   starters: StarterGroup[]
+  /** 启动率页面的配置：启动条件 + 抽滤效果 */
+  plan: RatePlan
   updatedAt: number
 }
 
@@ -86,7 +89,16 @@ function normalizeStarters(value: unknown): StarterGroup[] {
 }
 
 function blankDeck(name = DEFAULT_NAME): SavedDeck {
-  return { id: uid(), name, main: [], extra: [], side: [], starters: [], updatedAt: Date.now() }
+  return {
+    id: uid(),
+    name,
+    main: [],
+    extra: [],
+    side: [],
+    starters: [],
+    plan: blankPlan(),
+    updatedAt: Date.now(),
+  }
 }
 
 function normalizeDeck(raw: Partial<SavedDeck>, fallbackName = DEFAULT_NAME): SavedDeck {
@@ -97,6 +109,7 @@ function normalizeDeck(raw: Partial<SavedDeck>, fallbackName = DEFAULT_NAME): Sa
     extra: normalizeEntries(raw.extra),
     side: normalizeEntries(raw.side),
     starters: normalizeStarters(raw.starters),
+    plan: normalizePlan(raw.plan),
     updatedAt: Number(raw.updatedAt || Date.now()),
   }
 }
@@ -242,6 +255,7 @@ export const useDeckStore = defineStore('deck', () => {
       extra: source.extra.map((entry) => ({ ...entry })),
       side: source.side.map((entry) => ({ ...entry })),
       starters: source.starters.map((group) => ({ id: uid(), cards: [...group.cards] })),
+      plan: clonePlan(source.plan),
       updatedAt: Date.now(),
     }
     decks.value.unshift(copy)
@@ -371,6 +385,16 @@ export const useDeckStore = defineStore('deck', () => {
     touch()
   }
 
+  /* ---- 启动率配置 ---- */
+
+  function patchPlan(mutate: (plan: RatePlan) => void) {
+    const target = current.value
+    if (!target) return
+    if (!target.plan) target.plan = blankPlan()
+    mutate(target.plan)
+    touch()
+  }
+
   watch(
     () => ({ decks: decks.value, currentId: currentDeckId.value }),
     (value) => persist(value),
@@ -400,5 +424,6 @@ export const useDeckStore = defineStore('deck', () => {
     removeStarter,
     addStarterCard,
     removeStarterCard,
+    patchPlan,
   }
 })

@@ -52,6 +52,7 @@ onMounted(() => {
         <RouterLink to="/">总览</RouterLink>
         <RouterLink to="/cards">卡牌检索</RouterLink>
         <RouterLink to="/deck">卡组构建</RouterLink>
+        <RouterLink to="/rates">启动率</RouterLink>
         <RouterLink to="/lab">combo工坊</RouterLink>
       </nav>
 

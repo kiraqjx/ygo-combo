@@ -718,6 +718,9 @@ function addCard(card: CardData) {
           </button>
         </div>
         <div class="modal-foot">
+          <RouterLink to="/rates" class="btn ghost" @click="starterModal = false">
+            完整推演（含抽滤效果）→
+          </RouterLink>
           <button class="btn ghost" @click="starterModal = false">关闭</button>
         </div>
       </div>

@@ -4618,6 +4618,803 @@ hr,
   }
 }
 
+/* ---------- 启动率 ---------- */
+.rates-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+  padding: 6px 0 20px;
+}
+
+.rates-head h1 {
+  font-size: 32px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  margin: 10px 0 8px;
+}
+
+.rates-head p {
+  max-width: 760px;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.rates-head-badges {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.rates-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.rates-col {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+/* 右侧整列吸顶：结论、计算过程、结果怎么读一起固定，内容超高时列内滚动 */
+.rates-aside {
+  position: sticky;
+  top: 78px;
+  max-height: calc(100vh - 96px);
+  overflow-y: auto;
+  padding-right: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(240, 243, 246, 0.18) transparent;
+}
+
+/*
+ * 关键：面板必须禁止 flex 收缩。
+ * 父列限高后 flex 子项默认会被压扁，而 .panel 自带 overflow: hidden，
+ * 结果就是内容被裁掉、容器却不算溢出，连滚动条都不出现。
+ */
+.rates-aside > * {
+  flex: 0 0 auto;
+}
+
+.rate-block {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.rate-mini {
+  width: 62px;
+  height: 28px;
+  padding: 2px 6px;
+  font-size: 12px;
+  text-align: center;
+}
+
+select.rate-mini {
+  width: 52px;
+  height: 22px;
+  padding: 0 2px;
+  font-size: 11px;
+}
+
+.rate-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid rgba(240, 243, 246, 0.07);
+  border-radius: 10px;
+  background: rgba(240, 243, 246, 0.02);
+}
+
+.rate-group-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rate-group-title {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.rate-group-chance {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--gold);
+}
+
+.rate-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.rate-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px 2px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.22);
+  font-size: 11.5px;
+  color: var(--text-dim);
+}
+
+.rate-chip.gate {
+  border-color: rgba(163, 113, 247, 0.32);
+  background: rgba(163, 113, 247, 0.1);
+}
+
+/* 启动组的排除项：上手就作废的废件 */
+.rate-chip.exclude {
+  padding-right: 6px;
+  border-color: rgba(255, 123, 138, 0.32);
+  background: rgba(255, 123, 138, 0.08);
+  color: var(--red);
+}
+
+.rate-chip.exclude select.rate-mini {
+  width: 46px;
+  height: 20px;
+  padding: 0 2px;
+  font-size: 10.5px;
+  color: var(--red);
+  border-color: rgba(255, 123, 138, 0.3);
+  background: rgba(0, 0, 0, 0.28);
+}
+
+.rate-chip.exclude .rate-removable {
+  height: 18px;
+  padding: 0 5px;
+  border: 1px solid rgba(255, 123, 138, 0.28);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.24);
+  color: var(--text-mute);
+  font-size: 10px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.rate-chip.exclude .rate-removable.on {
+  border-color: rgba(95, 227, 161, 0.35);
+  background: rgba(95, 227, 161, 0.12);
+  color: var(--green);
+}
+
+.rate-chip.exclude .rate-removable:hover {
+  color: var(--text);
+}
+
+/* 废件条目：卡片 chips 与「额度 / 可解除 / 删除」在同一行，窄屏自动换行 */
+.rate-blocker-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.rate-removable {
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid rgba(255, 123, 138, 0.3);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.24);
+  color: var(--text-mute);
+  font-size: 10.5px;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.rate-removable.on {
+  border-color: rgba(95, 227, 161, 0.35);
+  background: rgba(95, 227, 161, 0.12);
+  color: var(--green);
+}
+
+.rate-removable:hover {
+  color: var(--text);
+}
+
+.rate-trace-dead {
+  font-style: normal;
+  color: var(--amber);
+}
+
+.rate-exclude {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 9px;
+  border: 1px dashed rgba(255, 123, 138, 0.22);
+  border-radius: 9px;
+  background: rgba(255, 123, 138, 0.04);
+}
+
+.rate-exclude-title {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  flex-wrap: wrap;
+  font-size: 11.5px;
+  color: var(--red);
+}
+
+.rate-exclude-hint {
+  font-size: 10.5px;
+  color: var(--text-mute);
+}
+
+.rate-chip.gate > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.rate-and {
+  color: var(--violet);
+  font-size: 10px;
+  opacity: 0.9;
+}
+
+.rate-chip button {
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  color: var(--text-mute);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.rate-chip button:hover {
+  color: var(--red);
+}
+
+.rate-pick {
+  height: 30px;
+  font-size: 12px;
+}
+
+.rate-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.rate-effect {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid rgba(240, 243, 246, 0.07);
+  border-radius: 10px;
+  background: rgba(240, 243, 246, 0.02);
+}
+
+.rate-effect-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rate-effect-index {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(113, 183, 255, 0.14);
+  color: var(--gold);
+  font-family: var(--mono);
+  font-size: 10.5px;
+}
+
+.rate-effect-thumb {
+  flex: 0 0 auto;
+  width: 26px;
+  height: 38px;
+  object-fit: cover;
+  border-radius: 3px;
+  border: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.rate-effect-hint {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11px;
+  color: var(--cyan);
+  opacity: 0.85;
+}
+
+.rate-ops {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.rate-op {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border: 1px solid rgba(240, 243, 246, 0.06);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.rate-op-index {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--text-mute);
+  min-width: 26px;
+}
+
+.rate-op .rate-field {
+  font-size: 11px;
+}
+
+.rate-op .rate-mini {
+  width: 52px;
+  height: 26px;
+}
+
+.rate-op .seg button {
+  padding: 3px 8px;
+  font-size: 11px;
+}
+
+.rate-op-desc {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--text-mute);
+  opacity: 0.9;
+}
+
+.rate-op .icon-btn {
+  margin-left: auto;
+}
+
+.rate-fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.rate-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--text-mute);
+}
+
+.rate-field-label {
+  font-size: 11.5px;
+  color: var(--text-mute);
+}
+
+.rate-check {
+  gap: 5px;
+}
+
+.rate-check input {
+  accent-color: var(--gold);
+}
+
+.rate-gate {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.rate-hero {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.rate-value {
+  font-family: var(--mono);
+  font-size: 46px;
+  font-weight: 650;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  background: linear-gradient(118deg, #eef4ff, #71b7ff 42%, #6ee7f9);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.rate-delta {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--green);
+  padding: 2px 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(38, 205, 77, 0.28);
+  background: rgba(38, 205, 77, 0.1);
+}
+
+.rate-caption {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-mute);
+}
+
+.rate-funnel {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  margin-top: 18px;
+}
+
+.rate-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 52px 40px;
+  grid-template-areas:
+    "label value gain"
+    "bar bar bar";
+  align-items: center;
+  gap: 3px 8px;
+}
+
+.rate-row-label {
+  grid-area: label;
+  font-size: 11.5px;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rate-row-value {
+  grid-area: value;
+  text-align: right;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text);
+}
+
+.rate-row-gain {
+  grid-area: gain;
+  text-align: right;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--green);
+}
+
+.rate-row-gain.zero {
+  color: var(--text-mute);
+}
+
+.rate-row-bar {
+  grid-area: bar;
+  display: block;
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(240, 243, 246, 0.08);
+  overflow: hidden;
+}
+
+.rate-row-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #a78bfa, #6ee7f9);
+  transition: width 0.2s ease;
+}
+
+.rate-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 16px;
+  font-size: 11px;
+  color: var(--text-mute);
+}
+
+.rate-note {
+  margin-top: 10px;
+  padding: 9px 11px;
+  border: 1px solid rgba(240, 243, 246, 0.08);
+  border-radius: 8px;
+  background: rgba(240, 243, 246, 0.02);
+  font-size: 11.5px;
+  color: var(--text-dim);
+}
+
+.rate-note.amber {
+  border-color: rgba(240, 183, 47, 0.28);
+  background: rgba(240, 183, 47, 0.08);
+  color: var(--amber);
+}
+
+.rate-note.red {
+  border-color: rgba(255, 106, 105, 0.3);
+  background: rgba(255, 106, 105, 0.08);
+  color: var(--red);
+}
+
+.rate-warn {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 12px;
+  font-size: 11.5px;
+  color: var(--amber);
+}
+
+.rate-placeholder {
+  padding: 28px 10px;
+  text-align: center;
+  color: var(--text-mute);
+  font-size: 12.5px;
+}
+
+.rate-placeholder-icon {
+  font-size: 30px;
+  color: rgba(113, 183, 255, 0.5);
+  margin-bottom: 8px;
+}
+
+.rate-run {
+  width: 100%;
+  height: 40px;
+  margin-top: 14px;
+}
+
+.rate-explain p {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-bottom: 9px;
+}
+
+.rate-explain p:last-child {
+  margin-bottom: 0;
+}
+
+.rate-explain b {
+  color: var(--text);
+}
+
+/* ---------- 启动率推导过程 ---------- */
+.rate-derive {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.rate-derive-step {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  gap: 9px;
+  align-items: start;
+}
+
+.rate-derive-no {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--text-mute);
+}
+
+.rate-derive-main {
+  min-width: 0;
+}
+
+.rate-derive-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.rate-derive-title {
+  font-size: 12px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rate-derive-value {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.rate-derive-detail {
+  margin-top: 3px;
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--text-mute);
+}
+
+.rate-derive-sub {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 3px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.rate-derive-sub-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rate-derive-sub-value {
+  font-family: var(--mono);
+  color: var(--text-mute);
+  white-space: nowrap;
+}
+
+.rate-derive-gain {
+  margin-top: 4px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--green);
+}
+
+.rate-derive-gain.zero {
+  color: var(--text-mute);
+}
+
+.rate-derive-total {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line);
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+/* 效果内部的逐算子归因 */
+.rate-trace {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-top: 9px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: rgba(240, 243, 246, 0.025);
+}
+
+.rate-trace-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  font-size: 10.5px;
+  color: var(--amber);
+}
+
+.rate-trace-op {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.rate-trace-op-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.rate-trace-op-label {
+  font-size: 11px;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rate-trace-deck {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-mute);
+  white-space: nowrap;
+}
+
+.rate-trace-op-flow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 10.5px;
+  color: var(--text-mute);
+}
+
+.rate-trace-op-flow b {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  color: var(--green);
+  white-space: nowrap;
+}
+
+.rate-trace-op-flow b.zero {
+  color: var(--text-mute);
+}
+
+.rate-derive-foot {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.rate-derive-foot p {
+  margin-bottom: 7px;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--text-mute);
+}
+
+.rate-derive-foot p:last-child {
+  margin-bottom: 0;
+}
+
+@media (max-width: 1080px) {
+  .rates-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .rates-aside {
+    position: static;
+    max-height: none;
+    overflow: visible;
+    padding-right: 0;
+  }
+
+  .rate-value {
+    font-size: 38px;
+  }
+}
+
+@media (max-width: 860px) {
+  /* 导航多了「启动率」一项，小屏改成横向滚动，别把页面撑宽 */
+  .nav {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .rate-row {
+    grid-template-columns: minmax(0, 1fr) 48px 38px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     animation-duration: 0.01ms !important;

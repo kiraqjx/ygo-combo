@@ -177,14 +177,26 @@ const ydkTotal = computed(() => {
   return parsed.main.length + parsed.extra.length + parsed.side.length
 })
 
+/** 解析卡号：异画编号先折回本体密码，再回查卡库（本体和它的异画会合并成一条） */
+const resolveYdkCard = (id: number) => cards.getCard(cards.normalizeCardId(id))
+
 const ydkEntries = computed<DeckSections>(() => {
   const parsed = ydkParsed.value
-  const resolve = (id: number) => cards.getCard(id)?.name
   return {
-    main: groupYdkCards(parsed.main, resolve),
-    extra: groupYdkCards(parsed.extra, resolve),
-    side: groupYdkCards(parsed.side, resolve),
+    main: groupYdkCards(parsed.main, resolveYdkCard),
+    extra: groupYdkCards(parsed.extra, resolveYdkCard),
+    side: groupYdkCards(parsed.side, resolveYdkCard),
   }
+})
+
+/** 被折回本体密码的异画卡张数 */
+const ydkAltCount = computed(() => {
+  const parsed = ydkParsed.value
+  let count = 0
+  for (const id of [...parsed.main, ...parsed.extra, ...parsed.side]) {
+    if (cards.normalizeCardId(id) !== id) count += 1
+  }
+  return count
 })
 
 /** 卡库未收录的卡片种类数（名称会显示成 #卡号） */
@@ -1010,6 +1022,9 @@ function refreshLibrary() {
               导入后会<b>覆盖</b>当前卡组「{{ deck.name || '未命名' }}」的主卡组 / 额外卡组 / 副卡组，原有内容不会保留。
             </div>
 
+            <div v-if="ydkAltCount" class="ydk-note">
+              {{ ydkAltCount }} 张异画卡会按本体卡导入（卡库只收录本体密码，卡图显示原画）。
+            </div>
             <div v-if="ydkUnknown" class="ydk-note warn">
               {{ ydkUnknown }} 种卡片卡库未收录，会以 #卡号 显示；可以先刷新卡库，或在检索面板用「＋ 自定义卡」补录。
             </div>

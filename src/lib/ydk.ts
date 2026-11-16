@@ -74,17 +74,26 @@ export function parseYdk(text: string): ParsedYdk {
   return out
 }
 
-/** 展开的卡号列表 → 去重合并后的卡组条目（保持首次出现的顺序） */
-export function groupYdkCards(ids: number[], resolveName: (id: number) => string | undefined): DeckEntry[] {
+/**
+ * 展开的卡号列表 → 去重合并后的卡组条目（保持首次出现的顺序）。
+ * `resolve` 返回卡库里的真实卡：`id` 可以和行里的卡号不同（异画卡折回本体密码），
+ * 这样同一张卡的本体 + 多张异画会合并成一条。
+ */
+export function groupYdkCards(
+  ids: number[],
+  resolve: (id: number) => { id: number; name: string } | undefined,
+): DeckEntry[] {
   const byId = new Map<number, DeckEntry>()
   const out: DeckEntry[] = []
-  for (const id of ids) {
+  for (const raw of ids) {
+    const card = resolve(raw)
+    const id = card?.id ?? raw
     const hit = byId.get(id)
     if (hit) {
       hit.count += 1
       continue
     }
-    const entry: DeckEntry = { id, name: resolveName(id) || `#${id}`, count: 1 }
+    const entry: DeckEntry = { id, name: card?.name || `#${raw}`, count: 1 }
     byId.set(id, entry)
     out.push(entry)
   }

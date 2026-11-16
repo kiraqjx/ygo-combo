@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
 import type { CardData, DeckEntry } from '@/types'
 import { uid } from '@/lib/infer'
-import { blankPlan, clonePlan, normalizePlan, type RatePlan } from '@/lib/rates'
+import { blankPlan, clonePlan, normalizePlan, type RateClause, type RatePlan } from '@/lib/rates'
 
 export type DeckSection = 'main' | 'extra' | 'side'
 
@@ -29,6 +29,8 @@ const STORAGE_KEY = 'ygo-deck-builder-v2'
 /** 旧版只存单套卡组 */
 const LEGACY_KEY = 'ygo-deck-builder-v1'
 const DEFAULT_NAME = '我的卡组'
+/** 占位卡名：卡库未就绪 / 卡号未收录时用 `#卡号` 顶着 */
+const PLACEHOLDER_NAME = /^#\d+$/
 
 /** 启动率配置：一组启动卡（1-5 张），组与组之间是或关系 */
 export interface StarterGroup {
@@ -345,6 +347,80 @@ export const useDeckStore = defineStore('deck', () => {
   }
 
   /**
+   * 卡库就绪 / 补录自定义卡之后，用卡库里的真实数据修一遍卡组与启动率配置：
+   * - 异画编号（本体密码 + 1..9）折回本体密码；
+   * - 「#卡号」这种占位名换回真名。
+   * 折回后同一区域里撞号的条目合并张数，避免出现两条同卡。
+   */
+  function resolveNames(resolve: (id: number) => { id: number; name: string } | undefined): void {
+    let changed = false
+
+    const fixEntry = (target: { id: number; name: string }) => {
+      const hit = resolve(target.id)
+      if (!hit) return
+      if (hit.id !== target.id) {
+        target.id = hit.id
+        target.name = hit.name
+        changed = true
+        return
+      }
+      if (!PLACEHOLDER_NAME.test(target.name) || hit.name === target.name) return
+      target.name = hit.name
+      changed = true
+    }
+
+    const fixSlot = (slot: { cardId: number; name: string }) => {
+      const hit = resolve(slot.cardId)
+      if (!hit) return
+      if (hit.id !== slot.cardId) {
+        slot.cardId = hit.id
+        slot.name = hit.name
+        changed = true
+        return
+      }
+      if (!PLACEHOLDER_NAME.test(slot.name) || hit.name === slot.name) return
+      slot.name = hit.name
+      changed = true
+    }
+
+    const fixClauses = (clauses: RateClause[]) => {
+      for (const clause of clauses) for (const slot of clause.slots) fixSlot(slot)
+    }
+
+    /** 异画折回本体后可能和本体条目撞号，合并成一条 */
+    const mergeById = (list: DeckEntry[]) => {
+      const seen = new Map<number, DeckEntry>()
+      for (let index = 0; index < list.length; index += 1) {
+        const entry = list[index]
+        const hit = seen.get(entry.id)
+        if (!hit) {
+          seen.set(entry.id, entry)
+          continue
+        }
+        hit.count += entry.count
+        list.splice(index, 1)
+        index -= 1
+        changed = true
+      }
+    }
+
+    for (const deck of decks.value) {
+      for (const section of DECK_SECTIONS) {
+        const list = deck[section.id]
+        for (const entry of list) fixEntry(entry)
+        mergeById(list)
+      }
+      const plan = deck.plan
+      if (!plan) continue
+      fixClauses(plan.starters)
+      for (const blocker of plan.blockers) for (const card of blocker.cards) fixEntry(card)
+      for (const effect of plan.effects) fixClauses(effect.requirement)
+    }
+
+    if (changed) touch()
+  }
+
+  /**
    * 用导入的内容整体覆盖当前卡组（ydk 导入）。
    * 数量校验任何一项不过就整体拒绝，避免只改了一半。
    */
@@ -472,6 +548,7 @@ export const useDeckStore = defineStore('deck', () => {
     remove,
     clear,
     clearAll,
+    resolveNames,
     replaceAll,
     addStarter,
     removeStarter,

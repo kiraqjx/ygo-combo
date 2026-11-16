@@ -1,7 +1,13 @@
 import { defineStore } from 'pinia'
 import { computed, ref, shallowRef } from 'vue'
 import type { CardData } from '@/types'
-import { clearCardCache, loadCardDatabase, remoteSearch, type LoadProgress } from '@/lib/cardDb'
+import {
+  clearCardCache,
+  loadCardDatabase,
+  normalizeAltArtId,
+  remoteSearch,
+  type LoadProgress,
+} from '@/lib/cardDb'
 import {
   buildCustomCard,
   loadCustomCards,
@@ -11,6 +17,7 @@ import {
   type CustomCardDraft,
 } from '@/lib/customCards'
 import { collectFacets } from '@/lib/search'
+import { useDeckStore } from '@/stores/deck'
 
 const emptyProgress: LoadProgress = { phase: 'idle', loaded: 0, total: 0, message: '' }
 
@@ -47,6 +54,19 @@ export const useCardStore = defineStore('cards', () => {
 
   let loading: Promise<void> | null = null
 
+  /**
+   * 异画卡编号（本体密码 + 1..9）折回本体密码；本体已收录的卡 / 真正未收录的卡原样返回。
+   * 外部系统导出的卡组常常带着异画自己的编号，正式服卡库里查不到。
+   */
+  function normalizeCardId(id: number): number {
+    return normalizeAltArtId(id, (code) => cardMap.value.has(code))
+  }
+
+  /** 卡库 / 自定义卡变化后，把卡组与启动率里的异画编号、占位名换回本体卡 */
+  function syncDeckNames() {
+    useDeckStore().resolveNames((id) => cardMap.value.get(normalizeCardId(id)))
+  }
+
   async function init(force = false) {
     if (!force && (status.value === 'ready' || status.value === 'loading')) return loading ?? undefined
     status.value = 'loading'
@@ -59,6 +79,7 @@ export const useCardStore = defineStore('cards', () => {
         updatedAt.value = Date.now()
         status.value = 'ready'
         progress.value = { phase: 'ready', loaded: data.length, total: data.length, message: `卡库就绪 · ${data.length} 张` }
+        syncDeckNames()
       } catch (e) {
         error.value = e instanceof Error ? e.message : '卡库加载失败'
         status.value = 'error'
@@ -104,6 +125,7 @@ export const useCardStore = defineStore('cards', () => {
     const card = buildCustomCard(draft, id)
     custom.value = [...custom.value, card]
     persistCustomCards(custom.value)
+    syncDeckNames()
     return { ok: true, message: `已添加自定义卡「${name}」`, card }
   }
 
@@ -112,9 +134,10 @@ export const useCardStore = defineStore('cards', () => {
     persistCustomCards(custom.value)
   }
 
+  /** 按卡号查卡；异画编号会先折回本体密码，所以拿异画 id 也能查到卡 */
   function getCard(id?: number | null): CardData | undefined {
     if (!id) return undefined
-    return cardMap.value.get(id)
+    return cardMap.value.get(normalizeCardId(id))
   }
 
   /** 只存了卡名、没有 cardId 时按名字回查卡种 */
@@ -148,6 +171,7 @@ export const useCardStore = defineStore('cards', () => {
     refresh,
     getCard,
     getCardByName,
+    normalizeCardId,
     searchRemote,
     remoteResults,
     isCustomCard,

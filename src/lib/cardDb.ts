@@ -101,6 +101,27 @@ export const CARD_PLACEHOLDER = `data:image/svg+xml,${encodeURIComponent(
     '</svg>',
 )}`
 
+/**
+ * 异画卡在 ygopro 系卡库（EDOPro / YGOPro）里是独立条目，id = 本体密码 + n，
+ * 官方卡号本身不变（见 ygopro Card Database 的 alias 规则：|alias - id| 小于
+ * CARD_ARTWORK_VERSIONS_OFFSET，DataEditorX 限制差值不超过 9）。
+ * 正式服卡库只有本体密码，所以导入 ydk 时要把这些编号折回本体。
+ */
+export const ALT_ART_ID_SPAN = 9
+
+/**
+ * 卡号归一化：本身就是卡库里的卡就原样返回，否则按「本体密码 + 1..9」往上找，
+ * 命中就返回本体密码（异画卡），都不命中再原样返回（真正未收录的卡）。
+ */
+export function normalizeAltArtId(id: number, known: (id: number) => boolean): number {
+  if (!(id > 0) || known(id)) return id
+  for (let step = 1; step <= ALT_ART_ID_SPAN; step += 1) {
+    const base = id - step
+    if (base > 0 && known(base)) return base
+  }
+  return id
+}
+
 /** 从卡图 URL 里取出卡号（.../pics/71599345.jpg → 71599345） */
 function cardIdFromImageUrl(url: string): number | null {
   const hit = /\/(\d+)\.(?:jpe?g|png|webp)(?:\?.*)?$/i.exec(url)

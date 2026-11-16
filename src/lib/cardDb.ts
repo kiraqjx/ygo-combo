@@ -74,7 +74,11 @@ export async function idbDel(key: string): Promise<void> {
 }
 
 export const cardImageUrl = (id: number) => `https://cdn.233.momobako.com/ygopro/pics/${id}.jpg`
+/** momobako 缺图时的备用图源（新卡 / 先行卡常见） */
 export const cardImageFallback = (id: number) => `https://images.ygoprodeck.com/images/cards/${id}.jpg`
+/** 备用图源的小图，列表缩略图用，省流量 */
+export const cardImageFallbackSmall = (id: number) =>
+  `https://images.ygoprodeck.com/images/cards_small/${id}.jpg`
 
 /**
  * 卡图的同源地址：dev / preview 由 vite 代理到 momobako，
@@ -86,6 +90,51 @@ export const cardImageProxyUrl = (id: number) => `${CARD_IMG_BASE}${id}.jpg`
 
 /** 里侧表示用的标准卡背：ygopro 的 pics 目录里 id 0 就是卡背图 */
 export const cardBackImageUrl = `${CARD_IMG_BASE}0.jpg`
+
+/** 卡图缺失时的占位图：自定义卡（先行服 / 未收录）通常没有卡图 */
+export const CARD_PLACEHOLDER = `data:image/svg+xml,${encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 174">' +
+    '<rect width="120" height="174" rx="7" fill="#151b26"/>' +
+    '<rect x="7.5" y="7.5" width="105" height="159" rx="5" fill="none" stroke="#2a3446" stroke-width="1.5"/>' +
+    '<text x="60" y="94" font-family="sans-serif" font-size="30" fill="#3f4c61" text-anchor="middle">?</text>' +
+    '<text x="60" y="118" font-family="sans-serif" font-size="9" fill="#3f4c61" text-anchor="middle">NO IMAGE</text>' +
+    '</svg>',
+)}`
+
+/** 从卡图 URL 里取出卡号（.../pics/71599345.jpg → 71599345） */
+function cardIdFromImageUrl(url: string): number | null {
+  const hit = /\/(\d+)\.(?:jpe?g|png|webp)(?:\?.*)?$/i.exec(url)
+  if (!hit) return null
+  const id = Number(hit[1])
+  return id > 0 ? id : null
+}
+
+/**
+ * 卡图加载失败的两级兜底（由 App.vue 捕获阶段的全局监听调用）：
+ *   1. momobako 缺图 → 换 YGOPRODeck（列表缩略图用小图，省流量）
+ *   2. YGOPRODeck 也没有 → 换成占位图
+ * 自定义卡没有卡号对应的图，直接落到占位图。
+ */
+export function handleCardImageError(event: Event): void {
+  const img = event.target as HTMLImageElement | null
+  if (!img || img.tagName !== 'IMG') return
+  const step = img.dataset.cardFallback ?? '0'
+  if (step === '0') {
+    img.dataset.cardFallback = '1'
+    const id = cardIdFromImageUrl(img.src)
+    if (id === null) {
+      img.src = CARD_PLACEHOLDER
+      return
+    }
+    const width = img.clientWidth
+    img.src = width > 0 && width <= 72 ? cardImageFallbackSmall(id) : cardImageFallback(id)
+    return
+  }
+  if (step === '1') {
+    img.dataset.cardFallback = '2'
+    img.src = CARD_PLACEHOLDER
+  }
+}
 
 const NUMBER_WORDS: Record<string, number> = {
   零: 0, 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10,

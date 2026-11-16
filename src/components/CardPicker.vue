@@ -25,7 +25,7 @@ const quick = computed(() =>
 
 const results = computed(() => {
   if (!keyword.value.trim()) return []
-  if (store.status === 'ready') {
+  if (store.status === 'ready' || store.custom.length) {
     const f = { ...createFilters(), keyword: keyword.value, frame: frame.value }
     return searchCards(store.cards, f, 40).items
   }

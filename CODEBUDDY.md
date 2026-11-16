@@ -43,6 +43,8 @@
 
 `loadCardDatabase()` 下载 ygocdb 的 `cards.zip` → fflate 解压 → `normalizeCard()` 归一化成 `CardData`（含小写检索串 `blob`、`frame`、`kinds`）→ JSON 缓存进 IndexedDB（`ygo-infer` DB）。卡库不可用时 `remoteSearch()` 回退到 ygocdb 在线接口。`searchCards()` / `collectFacets()` 在内存里做筛选与聚合，`App.vue` 挂载时触发 `cardStore.init()`。
 
+卡库只有正式服数据，先行服 / 新卡搜不到，因此 `lib/customCards.ts` 支持手动录入（只写卡名、种类、可选卡号与效果文本），存 localStorage，并由 `stores/cards.ts` 与下载卡库合并成 `store.cards`（`library` 是下载库，`custom` 是本地库），检索、卡组、启动率、工坊都走合并后的列表。自定义卡没有卡图，`App.vue` 用捕获阶段的全局 `error` 监听把失败的 `<img>` 换成 `CARD_PLACEHOLDER`。
+
 ### 文本推断（`src/lib/infer.ts`）
 
 用正则从效果文本里识别"卡组加手 / 卡组特召 / 卡组送墓 / 墓地取牌 / 抽卡 / 丢弃自身"等事件，产出 `inferTiming()` / `makeTiming()`（卡牌 → 时序草稿）；`autoRuleMoves()` 依据卡种生成 `auto: true` 的 setup/settle 规则移动；`suggestHandtraps()` / `suggestTargets()` 给编辑器提供默认标记与卡组目标建议；`reuseAutoIds()` 在编辑器改动后复用旧的自动移动 id，避免手动连线失效。这里全是启发式规则，只在"选择卡片时"提供默认值，不参与推演。

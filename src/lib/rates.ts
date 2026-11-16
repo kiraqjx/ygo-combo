@@ -607,6 +607,28 @@ export function comb(n: number, k: number): number {
   return out
 }
 
+/**
+ * 超几何分布：卡组 total 张、其中 hits 张是「目标卡」，
+ * 起手 handSize 张里恰好抽到 k 张目标卡的概率。
+ * 废件上手率就是 hits = 废件张数 的特例。
+ */
+export function hypergeometricChance(
+  total: number,
+  handSize: number,
+  hits: number,
+  k: number,
+): number {
+  const n = Math.min(Math.max(0, Math.floor(handSize)), Math.max(0, Math.floor(total)))
+  const h = Math.min(Math.max(0, Math.floor(hits)), Math.max(0, Math.floor(total)))
+  const kk = Math.floor(k)
+  if (n <= 0 || kk < 0 || kk > h || kk > n) return 0
+  if (n - kk > total - h) return 0
+  const den = comb(total, n)
+  if (den <= 0) return 0
+  const num = comb(h, kk) * comb(total - h, n - kk)
+  return Math.min(1, Math.max(0, num / den))
+}
+
 /** 在 bounds 限制下枚举所有和为 total 的非负向量 */
 function forEachVector(bounds: number[], total: number, cb: (v: number[]) => void) {
   const m = bounds.length

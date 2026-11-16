@@ -15,6 +15,7 @@ import {
   buildRateModel,
   clonePlan,
   comb,
+  hypergeometricChance,
   openingChance,
   solveRate,
   type RateBlocker,
@@ -200,6 +201,58 @@ function toggleBlockerClear(blockerId: string) {
     blocker.clear = blocker.clear === 'leaveHand' ? 'never' : 'leaveHand'
   })
 }
+
+/* ---------------- 废件上手率（超几何，独立小工具） ---------------- */
+
+/** 上面配置的废件在主卡组里的总张数，作为输入框的默认值 */
+const configuredBricks = computed(() => {
+  const used = new Set(plan.value.blockers.flatMap((blocker) => blocker.cards.map((card) => card.id)))
+  if (!used.size) return 0
+  return mainEntries.value
+    .filter((entry) => used.has(entry.id))
+    .reduce((sum, entry) => sum + entry.count, 0)
+})
+
+const brickCount = ref(0)
+/** 用户手动改过就不再跟着废件配置走 */
+const brickTouched = ref(false)
+
+const bricks = computed(() => {
+  const value = Math.floor(Number(brickCount.value) || 0)
+  return Math.min(Math.max(0, value), deckSize.value)
+})
+
+/** 1~5 张的概率；张数不够或起手装不下时该行为空 */
+const brickRows = computed(() => {
+  const total = deckSize.value
+  const hand = handSize.value
+  return [1, 2, 3, 4, 5].map((k) => ({
+    k,
+    available: total > 0 && k <= bricks.value && k <= hand,
+    p: hypergeometricChance(total, hand, bricks.value, k),
+  }))
+})
+
+/** 至少上手 1 张（= 1 - 一张都不上手） */
+const brickAtLeastOne = computed(() => {
+  if (deckSize.value <= 0) return 0
+  return 1 - hypergeometricChance(deckSize.value, handSize.value, bricks.value, 0)
+})
+
+function onBrickInput(event: Event) {
+  const input = event.target as HTMLInputElement
+  brickTouched.value = true
+  const value = Math.floor(Number(input.value) || 0)
+  brickCount.value = Math.min(deckSize.value, Math.max(0, value))
+}
+
+watch(
+  configuredBricks,
+  (value) => {
+    if (!brickTouched.value) brickCount.value = value
+  },
+  { immediate: true },
+)
 
 /* ---------------- 抽滤效果 ---------------- */
 
@@ -770,6 +823,8 @@ watch(
     snapshot.value = null
     stale.value = true
     seedFromStarters()
+    brickTouched.value = false
+    brickCount.value = configuredBricks.value
     if (plan.value.starters.length) compute()
   },
 )
@@ -987,6 +1042,47 @@ onUnmounted(() => {
               「最多 ≤N」是容差：带 2 张同名废件、上手 1 张还能展开，就设 ≤1。
               默认「不可逆」——废件上手那一刻展开就断了，后面丢牌 / 送墓也救不回；
               如果只是占手牌位、丢掉就没事，点成「可解除」。
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <span class="panel-title">废件上手率</span>
+            <span class="inline-note">起手 {{ handSize }} 张 · 主卡组 {{ deckSize }} 张</span>
+          </div>
+          <div class="panel-body rate-block">
+            <div class="row wrap" style="gap: 10px; align-items: center">
+              <label class="rate-field">
+                <span>废件</span>
+                <input
+                  class="input rate-mini"
+                  type="number"
+                  min="0"
+                  :max="deckSize"
+                  :value="bricks"
+                  aria-label="废件张数"
+                  @input="onBrickInput"
+                />
+                <span>张</span>
+              </label>
+              <span class="inline-note">
+                默认取上面配置的废件总张数，也可以直接手填
+              </span>
+            </div>
+
+            <div class="rate-brick">
+              <div v-for="row in brickRows" :key="row.k" class="rate-brick-row">
+                <span class="rate-brick-label">上手 {{ row.k }} 张</span>
+                <span class="rate-brick-bar"><i :style="{ width: `${Math.min(100, row.p * 100)}%` }" /></span>
+                <span class="rate-brick-value" :class="{ mute: !row.available }">
+                  {{ row.available ? formatChance(row.p) : '—' }}
+                </span>
+              </div>
+            </div>
+
+            <div class="inline-note">
+              至少上手 1 张：{{ deckSize > 0 ? formatChance(brickAtLeastOne) : '—' }}（起手 {{ handSize }} 张里）
             </div>
           </div>
         </div>

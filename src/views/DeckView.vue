@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
-import type { CardData, DeckEntry } from '@/types'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import type { CardData, DeckEntry, FrameType } from '@/types'
+import { blankCustomDraft, type CustomCardDraft, type CustomExtraKind } from '@/lib/customCards'
 import { useCardStore } from '@/stores/cards'
 import { DECK_SECTIONS, MAX_STARTER_CARDS, useDeckStore, type DeckSection } from '@/stores/deck'
 import { createFilters, searchCards } from '@/lib/search'
@@ -8,7 +9,10 @@ import { cardImageUrl } from '@/lib/cardDb'
 import { downloadText, toast } from '@/lib/toast'
 import { atLeastOneChance, formatChance } from '@/lib/odds'
 import { allPresentChance, atLeastOneStarterChance } from '@/lib/starter'
-import { toYdk } from '@/lib/ydk'
+import { groupYdkCards, parseYdk, toYdk } from '@/lib/ydk'
+import { renderDeckPoster } from '@/lib/deckPoster'
+import { downloadBlob } from '@/lib/exportGif'
+import { copyImageToClipboard } from '@/lib/clipboard'
 import {
   exactOneMatch,
   formatMatch,
@@ -22,6 +26,10 @@ const deck = useDeckStore()
 
 onMounted(() => {
   void cards.init()
+})
+
+onUnmounted(() => {
+  if (posterUrl.value) URL.revokeObjectURL(posterUrl.value)
 })
 
 /* ---------------- 卡组编辑 ---------------- */
@@ -63,6 +71,186 @@ function exportYdk() {
   const filename = `${(active.name || 'deck').replace(/[\\/:*?"<>|]/g, '_')}.ydk`
   downloadText(filename, toYdk(active))
   toast(`已导出 ${filename}`)
+}
+
+/* ---- 卡组长图 ---- */
+
+const posterBusy = ref(false)
+const posterPercent = ref(0)
+const posterCopying = ref(false)
+const posterModal = ref(false)
+const posterUrl = ref('')
+const posterBlob = ref<Blob | null>(null)
+const posterName = ref('deck')
+
+const posterMeta = computed(() => {
+  const blob = posterBlob.value
+  if (!blob) return ''
+  return `${Math.round(blob.size / 1024)} KB · ${blob.type.replace('image/', '').toUpperCase()}`
+})
+
+function posterFileName(blob: Blob): string {
+  const ext = blob.type === 'image/png' ? 'png' : 'webp'
+  return `${posterName.value.replace(/[\\/:*?"<>|]/g, '_')}-卡组.${ext}`
+}
+
+async function exportPoster() {
+  const active = deck.current
+  if (!active || posterBusy.value) return
+  const total = [...active.main, ...active.extra, ...active.side].reduce(
+    (sum, entry) => sum + entry.count,
+    0,
+  )
+  if (!total) {
+    toast('卡组还是空的，先加几张卡', true)
+    return
+  }
+
+  posterBusy.value = true
+  posterPercent.value = 0
+  try {
+    const blob = await renderDeckPoster(
+      { name: active.name, main: active.main, extra: active.extra, side: active.side },
+      { onProgress: (percent) => (posterPercent.value = percent) },
+    )
+    if (posterUrl.value) URL.revokeObjectURL(posterUrl.value)
+    posterName.value = active.name || 'deck'
+    posterBlob.value = blob
+    posterUrl.value = URL.createObjectURL(blob)
+    posterModal.value = true
+  } catch (error) {
+    toast(error instanceof Error ? error.message : '导出卡组长图失败', true)
+  } finally {
+    posterBusy.value = false
+    posterPercent.value = 0
+  }
+}
+
+function closePoster() {
+  posterModal.value = false
+  if (posterUrl.value) {
+    URL.revokeObjectURL(posterUrl.value)
+    posterUrl.value = ''
+  }
+  posterBlob.value = null
+}
+
+function downloadPoster() {
+  const blob = posterBlob.value
+  if (!blob) return
+  downloadBlob(blob, posterFileName(blob))
+  toast(`已保存卡组长图（${Math.round(blob.size / 1024)} KB）`)
+}
+
+async function copyPoster() {
+  const blob = posterBlob.value
+  if (!blob || posterCopying.value) return
+  posterCopying.value = true
+  try {
+    await copyImageToClipboard(blob)
+    toast('已复制到剪贴板，去微信直接粘贴发送')
+  } catch (error) {
+    toast(error instanceof Error ? error.message : '复制失败，请改用下载', true)
+  } finally {
+    posterCopying.value = false
+  }
+}
+
+/* ---- ydk 导入 ---- */
+
+type DeckSections = Record<DeckSection, DeckEntry[]>
+
+const ydkInput = ref<HTMLInputElement | null>(null)
+const ydkTextarea = ref<HTMLTextAreaElement | null>(null)
+const ydkModal = ref(false)
+const ydkText = ref('')
+
+const sectionLabels: Record<DeckSection, string> = { main: '主卡组', extra: '额外卡组', side: '副卡组' }
+const sectionLimits: Record<DeckSection, number> = { main: 60, extra: 15, side: 15 }
+const sectionOrder: DeckSection[] = ['main', 'extra', 'side']
+
+/** 粘贴 / 选文件得到的文本，实时解析成预览 */
+const ydkParsed = computed(() => parseYdk(ydkText.value))
+
+const ydkTotal = computed(() => {
+  const parsed = ydkParsed.value
+  return parsed.main.length + parsed.extra.length + parsed.side.length
+})
+
+const ydkEntries = computed<DeckSections>(() => {
+  const parsed = ydkParsed.value
+  const resolve = (id: number) => cards.getCard(id)?.name
+  return {
+    main: groupYdkCards(parsed.main, resolve),
+    extra: groupYdkCards(parsed.extra, resolve),
+    side: groupYdkCards(parsed.side, resolve),
+  }
+})
+
+/** 卡库未收录的卡片种类数（名称会显示成 #卡号） */
+const ydkUnknown = computed(
+  () =>
+    [...ydkEntries.value.main, ...ydkEntries.value.extra, ...ydkEntries.value.side].filter(
+      (entry) => !cards.getCard(entry.id),
+    ).length,
+)
+
+/** 覆盖前先检查一遍，不通过就不让点「导入并覆盖」 */
+const ydkIssues = computed(() => {
+  const issues: string[] = []
+  if (!ydkTotal.value) return issues
+
+  for (const section of sectionOrder) {
+    const used = ydkEntries.value[section].reduce((sum, entry) => sum + entry.count, 0)
+    if (used > sectionLimits[section]) {
+      issues.push(`${sectionLabels[section]} ${used} 张，超过 ${sectionLimits[section]} 张上限`)
+    }
+  }
+
+  const copies = new Map<number, { count: number; name: string }>()
+  for (const section of sectionOrder) {
+    for (const entry of ydkEntries.value[section]) {
+      const hit = copies.get(entry.id)
+      if (hit) hit.count += entry.count
+      else copies.set(entry.id, { count: entry.count, name: entry.name })
+    }
+  }
+  for (const info of copies.values()) {
+    if (info.count > 3) issues.push(`「${info.name}」合计 ${info.count} 张，超过同名 3 张`)
+  }
+
+  return issues
+})
+
+function openYdk() {
+  ydkText.value = ''
+  ydkModal.value = true
+  void nextTick(() => ydkTextarea.value?.focus())
+}
+
+function pickYdkFile() {
+  ydkInput.value?.click()
+}
+
+async function onYdkFile(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+  try {
+    ydkText.value = await file.text()
+  } catch {
+    toast('读不到这个文件', true)
+  }
+}
+
+function confirmYdkImport() {
+  if (!ydkTotal.value || ydkIssues.value.length) return
+  const outcome = deck.replaceAll(ydkEntries.value)
+  toast(outcome.message, !outcome.ok)
+  if (!outcome.ok) return
+  ydkModal.value = false
+  ydkText.value = ''
 }
 
 /* ---- 小世界现象 ----
@@ -359,7 +547,8 @@ watch(frame, () => {
 })
 
 const result = computed(() => {
-  if (cards.status !== 'ready') return { items: [] as CardData[], total: 0 }
+  // 卡库还在下载时，至少让手动录入的自定义卡能被搜到
+  if (cards.status !== 'ready' && !cards.custom.length) return { items: [] as CardData[], total: 0 }
   const filters = { ...createFilters(), keyword: debounced.value, frame: frame.value }
   return searchCards(cards.cards, filters, limit.value)
 })
@@ -367,6 +556,62 @@ const result = computed(() => {
 function addCard(card: CardData) {
   const outcome = deck.add(card, target.value === 'auto' ? undefined : target.value)
   toast(outcome.message, !outcome.ok)
+}
+
+/* ---------------- 自定义卡（先行服 / 卡库未收录） ---------------- */
+
+const customModal = ref(false)
+const customDraft = ref<CustomCardDraft>(blankCustomDraft())
+
+const customFrames: { value: FrameType; label: string }[] = [
+  { value: 'monster', label: '怪兽' },
+  { value: 'spell', label: '魔法' },
+  { value: 'trap', label: '陷阱' },
+]
+
+const customSections: { value: CustomExtraKind; label: string }[] = [
+  { value: '', label: '主卡组' },
+  { value: '融合', label: '融合' },
+  { value: '同调', label: '同调' },
+  { value: '超量', label: '超量' },
+  { value: '连接', label: '连接' },
+]
+
+function openCustomCard(presetName = '') {
+  customDraft.value = blankCustomDraft(presetName || debounced.value.trim())
+  customModal.value = true
+}
+
+function submitCustomCard() {
+  const outcome = cards.addCustomCard(customDraft.value)
+  if (!outcome.ok || !outcome.card) {
+    toast(outcome.message, true)
+    return
+  }
+  toast(outcome.message)
+  customModal.value = false
+
+  const card = outcome.card
+  const preferred = target.value === 'auto' ? undefined : target.value
+  const placed = deck.add(card, preferred)
+  if (placed.ok || !preferred) {
+    toast(placed.message, !placed.ok)
+    return
+  }
+  // 指定的分区放不下（比如额外怪兽被指定进主卡组）就自动分栏再试一次
+  const retry = deck.add(card)
+  toast(retry.ok ? retry.message : placed.message, !retry.ok)
+}
+
+function deleteCustomCard(card: CardData) {
+  cards.removeCustomCard(card.id)
+  toast(`已删除自定义卡「${card.name}」，卡组里若还有它会显示为缺卡`)
+}
+
+/** 卡库缓存可能落后于新发售的卡，重新拉一次 */
+function refreshLibrary() {
+  toast('正在重新下载卡库…')
+  void cards.refresh()
 }
 </script>
 
@@ -400,7 +645,23 @@ function addCard(card: CardData) {
         </span>
       </div>
       <div class="deck-toolbar-row">
+        <button class="btn sm ghost" title="粘贴或选择 ydk 导入（会覆盖当前卡组）" @click="openYdk">导入ydk</button>
         <button class="btn sm ghost" @click="exportYdk">导出ydk</button>
+        <button
+          class="btn sm ghost"
+          title="把整套卡组画成一张竖版长图（可直接分享）"
+          :disabled="posterBusy"
+          @click="exportPoster"
+        >
+          {{ posterBusy ? `生成中 ${posterPercent}%` : '导出长图' }}
+        </button>
+        <input
+          ref="ydkInput"
+          type="file"
+          accept=".ydk,.txt,text/plain"
+          style="display: none"
+          @change="onYdkFile"
+        />
         <button class="btn sm ghost" @click="oddsModal = true">上手概率</button>
         <button class="btn sm ghost" :disabled="!deck.counts.main" @click="openSmallWorld">小世界现象</button>
         <button class="btn sm ghost" :disabled="!deck.counts.main" @click="openHand">模拟起手</button>
@@ -437,9 +698,18 @@ function addCard(card: CardData) {
       <aside class="panel deck-search">
         <div class="panel-head">
           <span class="panel-title">卡片检索</span>
-          <span class="mono mute" style="font-size: 11px">
-            {{ cards.status === 'ready' ? `${result.total.toLocaleString()} 张` : '卡库载入中' }}
-          </span>
+          <div class="row" style="gap: 6px; align-items: center">
+            <span class="mono mute" style="font-size: 11px">
+              {{ cards.status === 'ready' ? `${result.total.toLocaleString()} 张` : '卡库载入中' }}
+            </span>
+            <button
+              class="btn xs ghost"
+              title="手动录入卡库里没有的卡（先行服 / 新卡）"
+              @click="openCustomCard()"
+            >
+              ＋ 自定义卡
+            </button>
+          </div>
         </div>
         <div class="deck-search-body">
           <input v-model="keyword" class="input" placeholder="搜索卡名 / 效果文本" spellcheck="false" />
@@ -472,7 +742,8 @@ function addCard(card: CardData) {
               v-for="c in result.items"
               :key="c.id"
               class="deck-result"
-              :title="`${c.name} · 点击加入卡组`"
+              :class="{ 'is-custom': c.custom }"
+              :title="c.custom ? `${c.name} · 自定义卡 · 点击加入卡组` : `${c.name} · 点击加入卡组`"
               @click="addCard(c)"
             >
               <img :src="cardImageUrl(c.id)" :alt="c.name" loading="lazy" @click.stop="openCard(c.id)" />
@@ -486,8 +757,35 @@ function addCard(card: CardData) {
             <div v-else-if="cards.status === 'error'" class="deck-empty">
               {{ cards.error }}
               <button class="btn xs primary" style="margin-top: 10px" @click="cards.init(true)">重试</button>
+              <button
+                v-if="debounced.trim()"
+                class="btn xs ghost"
+                style="margin-top: 8px"
+                @click="openCustomCard(debounced.trim())"
+              >
+                ＋ 手动添加「{{ debounced.trim() }}」
+              </button>
             </div>
-            <div v-else-if="!result.items.length" class="deck-empty">没有符合条件的卡片</div>
+            <div v-else-if="!result.items.length" class="deck-empty">
+              没有符合条件的卡片
+              <button
+                v-if="debounced.trim()"
+                class="btn xs primary"
+                style="margin-top: 10px"
+                @click="openCustomCard(debounced.trim())"
+              >
+                ＋ 手动添加「{{ debounced.trim() }}」
+              </button>
+              <button
+                v-if="debounced.trim()"
+                class="btn xs ghost"
+                style="margin-top: 8px"
+                title="卡库缓存可能没有收录新发售的卡，重新下载一次"
+                @click="refreshLibrary"
+              >
+                刷新卡库
+              </button>
+            </div>
           </div>
 
           <button
@@ -498,7 +796,7 @@ function addCard(card: CardData) {
           >
             加载更多（{{ result.total - result.items.length }}）
           </button>
-          <div class="inline-note">点击卡片加入 · 点卡图查看详情</div>
+          <div class="inline-note">点击卡片加入 · 点卡图查看详情 · 搜不到的卡可手动录入</div>
         </div>
       </aside>
     </div>
@@ -645,6 +943,180 @@ function addCard(card: CardData) {
         </div>
         <div class="modal-foot">
           <button class="btn ghost" @click="swModal = false">关闭</button>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="posterModal" class="overlay center" @click.self="closePoster">
+      <div class="modal poster-modal">
+        <div class="modal-head">
+          <div>
+            <div style="font-size: 14px; font-weight: 600">卡组长图</div>
+            <div class="inline-note">{{ posterMeta }} · 复制后可直接粘进微信</div>
+          </div>
+          <button class="icon-btn" aria-label="关闭" @click="closePoster">✕</button>
+        </div>
+        <div class="modal-body poster-body">
+          <div class="poster-preview">
+            <img v-if="posterUrl" :src="posterUrl" alt="卡组长图预览" />
+          </div>
+        </div>
+        <div class="modal-foot">
+          <button class="btn ghost" @click="closePoster">关闭</button>
+          <button class="btn" @click="downloadPoster">下载图片</button>
+          <button class="btn primary" :disabled="posterCopying" @click="copyPoster">
+            {{ posterCopying ? '复制中…' : '复制到剪贴板' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="ydkModal" class="overlay center" @click.self="ydkModal = false">
+      <div class="modal" style="width: min(560px, 100%)">
+        <div class="modal-head">
+          <div>
+            <div style="font-size: 14px; font-weight: 600">导入 ydk</div>
+            <div class="inline-note">粘贴 ydk 文本，或选择一个 .ydk 文件</div>
+          </div>
+          <button class="icon-btn" aria-label="关闭" @click="ydkModal = false">✕</button>
+        </div>
+        <div class="modal-body">
+          <textarea
+            ref="ydkTextarea"
+            v-model="ydkText"
+            class="textarea ydk-textarea"
+            spellcheck="false"
+            placeholder="#created by ...&#10;#main&#10;71599345&#10;89631139&#10;#extra&#10;44508094&#10;!side&#10;97268402"
+          />
+
+          <div class="row wrap" style="gap: 8px; margin-top: 10px">
+            <button class="btn sm ghost" @click="pickYdkFile">选择 ydk 文件</button>
+            <button class="btn sm ghost" :disabled="!ydkText" @click="ydkText = ''">清空</button>
+            <span class="inline-note">每行一张卡的卡号；没有段标记时全部按主卡组处理</span>
+          </div>
+
+          <template v-if="ydkTotal">
+            <div class="ydk-summary" style="margin-top: 14px">
+              <div v-for="section in sectionOrder" :key="section" class="ydk-stat">
+                <span>{{ sectionLabels[section] }}</span>
+                <b :class="{ over: ydkParsed[section].length > sectionLimits[section] }">
+                  {{ ydkParsed[section].length }}
+                </b>
+                <span class="mute">/ {{ sectionLimits[section] }}</span>
+              </div>
+            </div>
+
+            <div class="ydk-note">
+              导入后会<b>覆盖</b>当前卡组「{{ deck.name || '未命名' }}」的主卡组 / 额外卡组 / 副卡组，原有内容不会保留。
+            </div>
+
+            <div v-if="ydkUnknown" class="ydk-note warn">
+              {{ ydkUnknown }} 种卡片卡库未收录，会以 #卡号 显示；可以先刷新卡库，或在检索面板用「＋ 自定义卡」补录。
+            </div>
+            <div v-if="ydkParsed.ignored" class="ydk-note warn">
+              忽略了 {{ ydkParsed.ignored }} 行无法识别的内容。
+            </div>
+            <div v-for="(issue, index) in ydkIssues" :key="index" class="ydk-note warn">{{ issue }}</div>
+          </template>
+          <div v-else class="ydk-note" style="margin-top: 14px">
+            还没读到卡号。至少要有 1 张卡，例如 <span class="mono">71599345</span>。
+          </div>
+        </div>
+        <div class="modal-foot">
+          <button class="btn ghost" @click="ydkModal = false">取消</button>
+          <button class="btn primary" :disabled="!ydkTotal || ydkIssues.length > 0" @click="confirmYdkImport">
+            导入并覆盖
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="customModal" class="overlay center" @click.self="customModal = false">
+      <div class="modal" style="width: min(540px, 100%)">
+        <div class="modal-head">
+          <div>
+            <div style="font-size: 14px; font-weight: 600">添加自定义卡</div>
+            <div class="inline-note">卡库里没有的卡（先行服 / 新发售）可以手动录入，保存在本机</div>
+          </div>
+          <button class="icon-btn" aria-label="关闭" @click="customModal = false">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="field">
+            <label>卡名</label>
+            <input
+              v-model="customDraft.name"
+              class="input"
+              placeholder="例如：究极青眼白龙"
+              spellcheck="false"
+              @keyup.enter="submitCustomCard()"
+            />
+          </div>
+
+          <div class="field" style="margin-top: 10px">
+            <label>卡片 ID（可选）</label>
+            <input
+              v-model="customDraft.id"
+              class="input"
+              inputmode="numeric"
+              spellcheck="false"
+              placeholder="知道先行服卡号就填，能对上卡图；留空自动分配本地卡号"
+            />
+          </div>
+
+          <div class="field" style="margin-top: 10px">
+            <label>种类</label>
+            <div class="seg" style="width: 100%">
+              <button
+                v-for="f in customFrames"
+                :key="f.value"
+                type="button"
+                style="flex: 1"
+                :class="{ on: customDraft.frame === f.value }"
+                @click="customDraft.frame = f.value"
+              >
+                {{ f.label }}
+              </button>
+            </div>
+          </div>
+
+          <div v-if="customDraft.frame === 'monster'" class="field" style="margin-top: 10px">
+            <label>怪兽位置</label>
+            <div class="seg" style="width: 100%">
+              <button
+                v-for="k in customSections"
+                :key="k.value"
+                type="button"
+                style="flex: 1"
+                :class="{ on: customDraft.extra === k.value }"
+                @click="customDraft.extra = k.value"
+              >
+                {{ k.label }}
+              </button>
+            </div>
+          </div>
+
+          <div class="field" style="margin-top: 10px">
+            <label>效果文本（可选）</label>
+            <textarea
+              v-model="customDraft.desc"
+              class="textarea"
+              placeholder="贴上效果文本后，按效果关键词也能搜到，启动率页还能自动识别抽滤算子"
+            />
+          </div>
+
+          <div v-if="cards.custom.length" style="margin-top: 14px">
+            <div class="label" style="margin-bottom: 6px">已录入的自定义卡（{{ cards.custom.length }}）</div>
+            <div class="row wrap" style="gap: 6px">
+              <span v-for="c in cards.custom" :key="c.id" class="chip" :title="`卡号 ${c.id}`">
+                {{ c.name }}
+                <button type="button" title="删除这张自定义卡" @click="deleteCustomCard(c)">✕</button>
+              </span>
+            </div>
+          </div>
+        </div>
+        <div class="modal-foot">
+          <button class="btn ghost" @click="customModal = false">取消</button>
+          <button class="btn primary" @click="submitCustomCard()">添加并放入卡组</button>
         </div>
       </div>
     </div>

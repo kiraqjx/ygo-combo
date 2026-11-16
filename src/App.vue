@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, onUnmounted } from 'vue'
 import { useCardStore } from '@/stores/cards'
 import { useThemeStore } from '@/stores/theme'
+import { handleCardImageError } from '@/lib/cardDb'
 import { toasts } from '@/lib/toast'
 
 const cardStore = useCardStore()
@@ -26,8 +27,26 @@ const dbPercent = computed(() => {
   return cardStore.status === 'ready' ? 100 : 0
 })
 
+/**
+ * 卡图是 <img> 直接指向 CDN 的，自定义卡 / 先行服卡可能没有图。
+ * 用捕获阶段的全局监听统一兜底，省得每个 <img> 都写一遍 @error。
+ */
+function onImageError(event: Event) {
+  const img = event.target as HTMLImageElement | null
+  if (!img || img.tagName !== 'IMG') return
+  const src = img.src || ''
+  // 只处理卡图源（momobako / YGOPRODeck 大小图），别去动页面上的其他图片
+  if (!src.includes('/pics/') && !src.includes('/images/cards')) return
+  handleCardImageError(event)
+}
+
 onMounted(() => {
   void cardStore.init()
+  document.addEventListener('error', onImageError, true)
+})
+
+onUnmounted(() => {
+  document.removeEventListener('error', onImageError, true)
 })
 </script>
 

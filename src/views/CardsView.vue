@@ -62,7 +62,7 @@ const kindPool = computed(() => {
 })
 
 const result = computed(() => {
-  if (store.status !== 'ready') return { items: [] as CardData[], total: 0 }
+  if (store.status !== 'ready' && !store.custom.length) return { items: [] as CardData[], total: 0 }
   return searchCards(store.cards, filters, limit.value)
 })
 

@@ -2,12 +2,31 @@ import { defineStore } from 'pinia'
 import { computed, ref, shallowRef } from 'vue'
 import type { CardData } from '@/types'
 import { clearCardCache, loadCardDatabase, remoteSearch, type LoadProgress } from '@/lib/cardDb'
+import {
+  buildCustomCard,
+  loadCustomCards,
+  nextCustomId,
+  parseCardId,
+  persistCustomCards,
+  type CustomCardDraft,
+} from '@/lib/customCards'
 import { collectFacets } from '@/lib/search'
 
 const emptyProgress: LoadProgress = { phase: 'idle', loaded: 0, total: 0, message: '' }
 
+export interface AddCustomResult {
+  ok: boolean
+  message: string
+  card: CardData | null
+}
+
 export const useCardStore = defineStore('cards', () => {
-  const cards = shallowRef<CardData[]>([])
+  /** 下载来的卡库 */
+  const library = shallowRef<CardData[]>([])
+  /** 本地手动录入的卡（先行服 / 未收录） */
+  const custom = shallowRef<CardData[]>(loadCustomCards())
+  /** 检索与查卡统一走合并后的列表，自定义卡优先，保证同名时先命中用户录入的那张 */
+  const cards = computed(() => (custom.value.length ? [...custom.value, ...library.value] : library.value))
   const status = ref<'idle' | 'loading' | 'ready' | 'error'>('idle')
   const progress = ref<LoadProgress>({ ...emptyProgress })
   const error = ref('')
@@ -36,7 +55,7 @@ export const useCardStore = defineStore('cards', () => {
         const data = await loadCardDatabase((p) => {
           progress.value = p
         })
-        cards.value = data
+        library.value = data
         updatedAt.value = Date.now()
         status.value = 'ready'
         progress.value = { phase: 'ready', loaded: data.length, total: data.length, message: `卡库就绪 · ${data.length} 张` }
@@ -51,9 +70,46 @@ export const useCardStore = defineStore('cards', () => {
 
   async function refresh() {
     await clearCardCache()
-    cards.value = []
+    library.value = []
     status.value = 'idle'
     await init(true)
+  }
+
+  /* ---- 自定义卡 ---- */
+
+  function isCustomCard(id: number): boolean {
+    return custom.value.some((card) => card.id === id)
+  }
+
+  function addCustomCard(draft: CustomCardDraft): AddCustomResult {
+    const name = draft.name.trim()
+    if (!name) return { ok: false, message: '先填一个卡名', card: null }
+
+    const inLibrary = library.value.find((card) => card.name === name)
+    if (inLibrary) {
+      return { ok: false, message: `卡库里已经有「${name}」了，直接搜索添加即可`, card: null }
+    }
+    if (custom.value.some((card) => card.name === name)) {
+      return { ok: false, message: `已经添加过自定义卡「${name}」`, card: null }
+    }
+
+    const typedId = parseCardId(draft.id)
+    if (typedId !== null) {
+      const taken = cards.value.find((card) => card.id === typedId)
+      if (taken) return { ok: false, message: `卡号 ${typedId} 已经被「${taken.name}」占用`, card: null }
+    }
+
+    const used = new Set(cards.value.map((card) => card.id))
+    const id = typedId ?? nextCustomId(used)
+    const card = buildCustomCard(draft, id)
+    custom.value = [...custom.value, card]
+    persistCustomCards(custom.value)
+    return { ok: true, message: `已添加自定义卡「${name}」`, card }
+  }
+
+  function removeCustomCard(id: number): void {
+    custom.value = custom.value.filter((card) => card.id !== id)
+    persistCustomCards(custom.value)
   }
 
   function getCard(id?: number | null): CardData | undefined {
@@ -79,6 +135,8 @@ export const useCardStore = defineStore('cards', () => {
 
   return {
     cards,
+    library,
+    custom,
     status,
     progress,
     error,
@@ -92,5 +150,8 @@ export const useCardStore = defineStore('cards', () => {
     getCardByName,
     searchRemote,
     remoteResults,
+    isCustomCard,
+    addCustomCard,
+    removeCustomCard,
   }
 })

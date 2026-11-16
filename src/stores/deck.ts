@@ -344,6 +344,58 @@ export const useDeckStore = defineStore('deck', () => {
     clear('side')
   }
 
+  /**
+   * 用导入的内容整体覆盖当前卡组（ydk 导入）。
+   * 数量校验任何一项不过就整体拒绝，避免只改了一半。
+   */
+  function replaceAll(sections: Record<DeckSection, DeckEntry[]>): DeckActionResult {
+    const target = current.value
+    if (!target) return { ok: false, message: '请先新建一套卡组' }
+
+    const clean = (list: DeckEntry[] | undefined): DeckEntry[] =>
+      (list || [])
+        .filter((entry) => entry && entry.id > 0 && entry.count > 0)
+        .map((entry) => ({ id: entry.id, name: entry.name, count: Math.floor(entry.count) }))
+
+    const next: Record<DeckSection, DeckEntry[]> = {
+      main: clean(sections.main),
+      extra: clean(sections.extra),
+      side: clean(sections.side),
+    }
+
+    for (const section of DECK_SECTIONS) {
+      const used = next[section.id].reduce((sum, entry) => sum + entry.count, 0)
+      if (used > section.limit) {
+        return { ok: false, message: `${section.label} ${used} 张，超过 ${section.limit} 张上限` }
+      }
+    }
+
+    const copies = new Map<number, { count: number; name: string }>()
+    for (const section of DECK_SECTIONS) {
+      for (const entry of next[section.id]) {
+        const hit = copies.get(entry.id)
+        if (hit) hit.count += entry.count
+        else copies.set(entry.id, { count: entry.count, name: entry.name })
+      }
+    }
+    for (const info of copies.values()) {
+      if (info.count > MAX_COPIES) {
+        return { ok: false, message: `「${info.name}」合计 ${info.count} 张，超过同名 ${MAX_COPIES} 张` }
+      }
+    }
+
+    target.main = next.main
+    target.extra = next.extra
+    target.side = next.side
+    touch()
+
+    const size = (list: DeckEntry[]) => list.reduce((sum, entry) => sum + entry.count, 0)
+    return {
+      ok: true,
+      message: `已导入：主 ${size(next.main)} · 额 ${size(next.extra)} · 副 ${size(next.side)}`,
+    }
+  }
+
   /* ---- 启动率配置 ---- */
 
   function addStarter(): StarterGroup | null {
@@ -420,6 +472,7 @@ export const useDeckStore = defineStore('deck', () => {
     remove,
     clear,
     clearAll,
+    replaceAll,
     addStarter,
     removeStarter,
     addStarterCard,

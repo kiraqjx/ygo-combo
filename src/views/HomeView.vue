@@ -42,7 +42,7 @@ const stats = computed(() => [
         </h1>
 
         <div class="home-actions">
-          <RouterLink to="/lab" class="btn primary">开始推演</RouterLink>
+          <RouterLink to="/duel" class="btn primary">开始推演</RouterLink>
           <RouterLink to="/deck" class="btn">构筑卡组</RouterLink>
           <RouterLink to="/rates" class="btn ghost">先攻启动率</RouterLink>
         </div>
@@ -79,7 +79,7 @@ const stats = computed(() => [
         <span class="home-entry-note">废件 · 抽滤 · 先攻</span>
       </RouterLink>
 
-      <RouterLink to="/lab" class="home-entry">
+      <RouterLink to="/duel" class="home-entry">
         <span class="home-entry-icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
             <path d="M9.5 8.5a3 3 0 1 1 0 6H7a3 3 0 0 1 0-6h2.5Z" />
@@ -87,8 +87,18 @@ const stats = computed(() => [
             <path d="M8.5 12h7" opacity=".6" />
           </svg>
         </span>
-        <span class="home-entry-title">combo 工坊</span>
-        <span class="home-entry-note">时序 · 连锁 · 断链</span>
+        <span class="home-entry-title">combo 推演</span>
+        <span class="home-entry-note">内核 · 演练 · yrp 录像</span>
+      </RouterLink>
+
+      <RouterLink to="/skills" class="home-entry">
+        <span class="home-entry-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+            <path d="M12 3.5 14.2 9l5.8.5-4.4 3.8 1.4 5.7L12 16l-5 3 1.4-5.7L4 9.5 9.8 9 12 3.5Z" />
+          </svg>
+        </span>
+        <span class="home-entry-title">AI Skill</span>
+        <span class="home-entry-note">录像 · 展开逻辑 · 喂给 AI</span>
       </RouterLink>
 
       <RouterLink to="/cards" class="home-entry">

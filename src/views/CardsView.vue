@@ -289,13 +289,15 @@ function addToStep(card: CardData) {
       </section>
     </div>
 
-    <CardDetail v-if="selected" :card="selected" @close="selected = null">
-      <template #actions>
-        <button class="btn sm primary" @click="addToStep(selected!)">加为时序</button>
-        <button class="btn sm" @click="addToDeck(selected!)">加入推演卡组</button>
-        <button class="btn sm ghost" @click="addToOpening(selected!)">设为已知起手</button>
-        <a class="btn sm ghost" :href="`https://ygocdb.com/card/${selected.id}`" target="_blank" rel="noreferrer">在 ygocdb 查看</a>
-      </template>
-    </CardDetail>
+    <div v-if="selected" class="card-detail-layer" @click.self="selected = null">
+      <CardDetail :card="selected" @close="selected = null">
+        <template #actions>
+          <button class="btn sm primary" @click="addToStep(selected!)">加为时序</button>
+          <button class="btn sm" @click="addToDeck(selected!)">加入推演卡组</button>
+          <button class="btn sm ghost" @click="addToOpening(selected!)">设为已知起手</button>
+          <a class="btn sm ghost" :href="`https://ygocdb.com/card/${selected.id}`" target="_blank" rel="noreferrer">在 ygocdb 查看</a>
+        </template>
+      </CardDetail>
+    </div>
   </div>
 </template>

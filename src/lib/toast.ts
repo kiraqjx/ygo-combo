@@ -38,3 +38,13 @@ export function downloadText(filename: string, text: string, type = 'text/plain;
 export function downloadJson(filename: string, data: unknown) {
   downloadText(filename, JSON.stringify(data, null, 2), 'application/json')
 }
+
+export function downloadBytes(filename: string, bytes: Uint8Array, type = 'application/octet-stream') {
+  const blob = new Blob([bytes as unknown as BlobPart], { type })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}

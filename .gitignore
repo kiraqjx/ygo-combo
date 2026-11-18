@@ -5,3 +5,7 @@ dist-ssr
 .DS_Store
 *.local
 *.log
+
+# 决斗内核资源（Lua 脚本 + 卡数据，体积大，用 npm run assets:duel 生成）
+duel-assets
+.cache

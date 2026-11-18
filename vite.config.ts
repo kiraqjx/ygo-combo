@@ -1,3 +1,5 @@
+import { readFile } from 'node:fs/promises'
+import { extname, join, normalize, resolve } from 'node:path'
 import { fileURLToPath, URL } from 'node:url'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { defineConfig, type Plugin } from 'vite'
@@ -75,8 +77,62 @@ function cardImagePlugin(): Plugin {
   }
 }
 
+/**
+ * 决斗资源（Lua 脚本 + 卡数据）由 `npm run assets:duel` 生成到仓库根的 duel-assets/，
+ * 不进 dist：开发 / preview 由这个中间件直接读盘，生产环境用 VITE_DUEL_ASSET_BASE 指到 CDN。
+ */
+const DUEL_ASSET_ROOT = resolve(fileURLToPath(new URL('.', import.meta.url)), 'duel-assets')
+const DUEL_ASSET_TYPES: Record<string, string> = {
+  '.lua': 'text/plain; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.wasm': 'application/wasm',
+}
+
+function duelAssetMiddleware() {
+  return async (req: IncomingMessage, res: ServerResponse, next: () => void) => {
+    const path = (req.url || '').split('?')[0]
+    if (!path.startsWith('/duel-assets/')) {
+      next()
+      return
+    }
+    const rel = normalize(decodeURIComponent(path.slice('/duel-assets/'.length)))
+    if (!rel || rel.startsWith('..') || rel.includes('/../')) {
+      res.statusCode = 403
+      res.end()
+      return
+    }
+    try {
+      const body = await readFile(join(DUEL_ASSET_ROOT, rel))
+      const ext = extname(rel)
+      // 带 ?v= 的请求由 manifest 版本号决定 URL，可以长缓存；不带版本的必须每次校验
+      const versioned = (req.url || '').includes('?')
+      res.setHeader('content-type', DUEL_ASSET_TYPES[ext] || 'application/octet-stream')
+      res.setHeader(
+        'cache-control',
+        versioned ? 'public, max-age=31536000, immutable' : 'public, max-age=86400, must-revalidate',
+      )
+      res.end(body)
+    } catch {
+      res.statusCode = 404
+      res.end()
+    }
+  }
+}
+
+function duelAssetPlugin(): Plugin {
+  return {
+    name: 'ygo-duel-assets',
+    configureServer(server) {
+      server.middlewares.use(duelAssetMiddleware())
+    },
+    configurePreviewServer(server) {
+      server.middlewares.use(duelAssetMiddleware())
+    },
+  }
+}
+
 export default defineConfig({
-  plugins: [vue(), cardImagePlugin()],
+  plugins: [vue(), cardImagePlugin(), duelAssetPlugin()],
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),

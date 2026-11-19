@@ -29,6 +29,7 @@ import type {
   DuelLogEntry,
   DuelPlayerId,
   DuelQuestion,
+  DuelSignal,
   DuelStartOptions,
   DuelStateView,
 } from './types'
@@ -124,6 +125,8 @@ export class DuelSession {
   readonly playerResponses: OcgResponse[] = []
   /** 录像回放时记下的「提问 → 原始响应」，用来把录像翻译成操作说明 */
   readonly captures: DuelCapture[] = []
+  /** 结构化事件流：手坑命中分析用（见 replayHandtraps） */
+  readonly signals: DuelSignal[] = []
   /** 暂存恢复用的待回放队列 */
   private replayQueue: OcgResponse[] = []
   /** 录像回放：按顺序直接喂给内核的响应字节 */
@@ -331,6 +334,19 @@ export class DuelSession {
         if (status === OcgProcessResult.CONTINUE) continue
 
         const question = this.takeQuestion()
+        // 记一笔「现在轮到谁拿到连锁响应权」：
+        // 自排连锁时中间那几条连锁前后没有对手的响应窗口，手坑够不到
+        if (question?.kind === 'chain') {
+          this.signals.push({
+            turn: this.state.turn,
+            phase: this.state.phase,
+            player: question.player,
+            kind: 'prompt',
+            code: 0,
+            name: '',
+            chainSize: 0,
+          })
+        }
 
         // 录像回放：不经过界面 / 沙包策略，直接把录下来的字节按顺序喂回去
         if (this.rawQueue) {
@@ -633,7 +649,120 @@ export class DuelSession {
     }
   }
 
+  /**
+   * 记录手坑分析需要的关键事件。
+   * 日志文本只有「发动卡片 · X」，判断能吃什么手坑还需要区域、连锁号与卡移动，
+   * 所以这些消息单独留一份精简记录，供 replayHandtraps 做规则匹配。
+   */
+  private recordSignal(message: OcgMessage) {
+    if (this.signals.length >= 4000) return
+    const base = {
+      turn: this.state.turn,
+      phase: this.state.phase,
+      player: -1,
+      chainSize: 0,
+    }
+    const spot = (loc: {
+      controller: number
+      location: number
+      sequence: number
+      position?: number
+    }) => ({
+      controller: loc.controller,
+      location: loc.location,
+      sequence: loc.sequence,
+      ...(loc.position === undefined ? {} : { position: loc.position }),
+    })
+
+    switch (message.type) {
+      case OcgMessageType.SUMMONING:
+        this.signals.push({ ...base, kind: 'summon', player: message.controller, code: message.code, name: this.nameOf(message.code) })
+        break
+      case OcgMessageType.SPSUMMONING:
+        this.signals.push({ ...base, kind: 'spsummon', player: message.controller, code: message.code, name: this.nameOf(message.code) })
+        break
+      case OcgMessageType.FLIPSUMMONING:
+        this.signals.push({ ...base, kind: 'flip', player: message.controller, code: message.code, name: this.nameOf(message.code) })
+        break
+      case OcgMessageType.SUMMONED:
+        this.signals.push({ ...base, kind: 'summoned', code: 0, name: '' })
+        break
+      case OcgMessageType.SPSUMMONED:
+        this.signals.push({ ...base, kind: 'spsummoned', code: 0, name: '' })
+        break
+      case OcgMessageType.FLIPSUMMONED:
+        this.signals.push({ ...base, kind: 'flipsummoned', code: 0, name: '' })
+        break
+      case OcgMessageType.SET:
+        this.signals.push({
+          ...base,
+          kind: 'set',
+          player: message.controller,
+          code: message.code,
+          name: this.nameOf(message.code),
+          to: spot(message),
+        })
+        break
+      case OcgMessageType.POS_CHANGE:
+        this.signals.push({
+          ...base,
+          kind: 'position',
+          player: message.controller,
+          code: message.code,
+          name: this.nameOf(message.code),
+          from: spot({ ...message, position: message.prev_position }),
+          to: spot(message),
+        })
+        break
+      case OcgMessageType.CHAINING:
+        this.signals.push({
+          ...base,
+          kind: 'chain',
+          player: message.controller,
+          code: message.code,
+          name: this.nameOf(message.code),
+          chainSize: message.chain_size,
+          from: { controller: message.controller, location: message.location, sequence: message.sequence },
+        })
+        break
+      case OcgMessageType.CHAIN_SOLVING:
+        this.signals.push({ ...base, kind: 'solving', code: 0, name: '', chainSize: message.chain_size })
+        break
+      case OcgMessageType.CHAIN_SOLVED:
+        this.signals.push({ ...base, kind: 'solved', code: 0, name: '', chainSize: message.chain_size })
+        break
+      case OcgMessageType.CHAIN_NEGATED:
+        this.signals.push({ ...base, kind: 'negated', code: 0, name: '', chainSize: message.chain_size })
+        break
+      case OcgMessageType.MOVE:
+        this.signals.push({
+          ...base,
+          kind: 'move',
+          player: message.to.controller,
+          code: message.card,
+          name: this.nameOf(message.card),
+          from: spot(message.from),
+          to: spot(message.to),
+          reason: message.reason,
+        })
+        break
+      case OcgMessageType.DRAW:
+        this.signals.push({
+          ...base,
+          kind: 'draw',
+          player: message.player,
+          code: 0,
+          name: '',
+          count: message.drawn.length,
+        })
+        break
+      default:
+        break
+    }
+  }
+
   private pushLogFor(message: OcgMessage) {
+    this.recordSignal(message)
     const who = (player: number) => (player === 0 ? '我方' : '对手')
     switch (message.type) {
       case OcgMessageType.NEW_TURN:

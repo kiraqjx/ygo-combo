@@ -122,6 +122,62 @@ export interface DuelCapture {
   phase: number
 }
 
+/**
+ * 回放时记录的结构化事件。
+ *
+ * 日志只够人读（「发动卡片 · X」），判断「这一步能被哪个手坑打断」
+ * 还需要区域与动作类型，所以关键消息单独留一份精简记录：
+ * 召唤 / 特召 / 盖放 / 发动 / 结算 / 卡移动 / 抽卡。
+ */
+export type DuelSignalKind =
+  | 'summon'
+  | 'spsummon'
+  | 'flip'
+  | 'set'
+  /** 召唤 / 特召 / 反转召唤成功（内核的 SUMMONED / SPSUMMONED / FLIPSUMMONED，没有卡号，用来配对确认） */
+  | 'summoned'
+  | 'spsummoned'
+  | 'flipsummoned'
+  /** 表示形式变化（判断一张卡是不是「已经表侧表示」） */
+  | 'position'
+  /**
+   * 连锁响应权（SELECT_CHAIN 提问）：`player` 就是「现在轮到谁决定要不要连锁」。
+   * 自排连锁时中间的连锁号没人被问过，因此那些连锁拿不到手坑响应。
+   */
+  | 'prompt'
+  | 'chain'
+  | 'solving'
+  | 'solved'
+  | 'negated'
+  | 'move'
+  | 'draw'
+
+export interface DuelSignalSpot {
+  controller: number
+  location: number
+  sequence: number
+  /** 表示形式（OcgPosition），MOVE / SET / 表示形式变化才有 */
+  position?: number
+}
+
+export interface DuelSignal {
+  turn: number
+  phase: number
+  /** 0 我方 / 1 对手 / -1 系统 */
+  player: number
+  kind: DuelSignalKind
+  code: number
+  name: string
+  /** 连锁号（发动 / 结算相关） */
+  chainSize: number
+  from?: DuelSignalSpot
+  to?: DuelSignalSpot
+  /** 抽卡张数 */
+  count?: number
+  /** 卡移动的原因位掩码（效果 / cost / 解放 / 素材…），判断能不能被手坑无效要用 */
+  reason?: number
+}
+
 export interface DuelStartOptions {
   playerDeck: DuelDeck
   opponentDeck: DuelDeck

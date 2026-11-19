@@ -1,4 +1,6 @@
 import type { CardData, ComboLine, DeckEntry } from '@/types'
+import { HANDTRAP_FOOTNOTE, hitConsequenceText, hitNameText, hitPositionText } from './duel/replayHandtraps'
+import type { ReplayAnalysis } from './duel/replay'
 import { HANDTRAP_MAP } from './handtraps'
 import { buildRateModel, openingChance } from './rates'
 import { buildSkillCoverage, type CoverageItem, type SkillInput } from './skill'
@@ -33,6 +35,18 @@ export interface BundleStarter {
   lines: { combo: string; line: string }[]
 }
 
+export interface BundleReplay {
+  code: string
+  file: string
+  name: string
+  turns: number
+  incomplete: boolean
+  /** 对手真能打到的手坑命中点数量 */
+  hits: number
+  /** 被自排连锁规避、实际打不到的命中点数量 */
+  dodged: number
+}
+
 export interface BundleManifest {
   schemaVersion: number
   deck: { name: string; main: number; extra: number; side: number }
@@ -41,9 +55,11 @@ export interface BundleManifest {
     router: string
     fallback: string
     lines: string[]
+    replays: string[]
     cards: string
   }
   starters: BundleStarter[]
+  replays: BundleReplay[]
   handtraps: { code: number; name: string; category: string }[]
   bricks: { cards: { code: number; name: string }[]; allowance: number; clear: string }[]
   /** 卡号 → 角色（启动点 code / handtrap / brick / flex） */
@@ -141,6 +157,27 @@ export function buildSkillBundle(input: SkillInput): SkillBundle {
   for (const id of handtrapIds) usedCardIds.add(id)
   for (const id of brickIds) usedCardIds.add(id)
 
+  // 录像：每份可解析的 .yrp 一个文件，含展开流程与手坑命中点
+  const replays: BundleReplay[] = []
+  const replayFiles: Record<string, string> = {}
+  input.bindings.forEach((binding, index) => {
+    const analysis = binding.analysis
+    if (!analysis?.ok) return
+    const code = `replay-${String(index + 1).padStart(2, '0')}`
+    const file = `20-${code}.md`
+    const allHits = analysis.handtrapHits ?? []
+    replays.push({
+      code,
+      file,
+      name: binding.name,
+      turns: analysis.turns,
+      incomplete: analysis.incomplete,
+      hits: allHits.filter((hit) => !hit.dodged).length,
+      dodged: allHits.filter((hit) => hit.dodged).length,
+    })
+    replayFiles[file] = replayMarkdown(input, binding.name, analysis, code)
+  })
+
   const manifest: BundleManifest = {
     schemaVersion: 3,
     deck: {
@@ -154,9 +191,11 @@ export function buildSkillBundle(input: SkillInput): SkillBundle {
       router: '00-router.md',
       fallback: '90-fallback.md',
       lines: starters.filter((starter) => starter.file).map((starter) => starter.file as string),
+      replays: replays.map((item) => item.file),
       cards: `${CARD_DIR}/`,
     },
     starters,
+    replays,
     handtraps: handtrapDefs.map((def) => ({
       code: def.cardId as number,
       name: def.name,
@@ -174,13 +213,24 @@ export function buildSkillBundle(input: SkillInput): SkillBundle {
   const files: Record<string, string> = {}
   files[`${dir}/manifest.json`] = `${JSON.stringify(manifest, null, 2)}\n`
 
-  files[`${dir}/00-router.md`] = routerMarkdown(input, manifest, samples, starters, handtrapDefs, coverage, routes)
+  files[`${dir}/00-router.md`] = routerMarkdown(
+    input,
+    manifest,
+    samples,
+    starters,
+    handtrapDefs,
+    coverage,
+    routes,
+    replays,
+  )
 
   for (const starter of starters) {
     if (!starter.file) continue
     const linked = routes.filter((item) => starter.lines.some((line) => line.combo === item.comboName && line.line === item.line.name))
     files[`${dir}/${starter.file}`] = lineMarkdown(input, starter, linked, samples)
   }
+
+  for (const [file, text] of Object.entries(replayFiles)) files[`${dir}/${file}`] = text
 
   files[`${dir}/90-fallback.md`] = fallbackMarkdown(input, starters, samples, coverage)
 
@@ -209,6 +259,7 @@ function routerMarkdown(
   handtrapDefs: { id: string; name: string; category: string; cardId?: number }[],
   coverage: CoverageItem[],
   routes: RouteEntry[],
+  replays: BundleReplay[],
 ): string {
   const lines: string[] = []
   const slug = safeName(input.deckName)
@@ -269,6 +320,19 @@ function routerMarkdown(
       lines.push(`- **${group.label}**（${pct(group.chance)}）：${sample.hand.map(input.nameOf).join('、')}`)
     }
     lines.push('')
+  }
+
+  if (replays.length) {
+    lines.push('## 对局样本', '')
+    lines.push('| 文件 | 录像 | 回合 | 手坑点 | 被自排连锁规避 |')
+    lines.push('| --- | --- | --- | --- | --- |')
+    for (const replay of replays) {
+      lines.push(
+        `| ${replay.file} | ${replay.name} | ${replay.turns}${replay.incomplete ? '（未终局）' : ''} | ${replay.hits} | ${replay.dodged} |`,
+      )
+    }
+    lines.push('')
+    lines.push('> 展开流程与逐步的手坑命中点在各样本文件里；没有绑定录像时这一节为空。', '')
   }
 
   lines.push('## 手牌角色', '')
@@ -481,6 +545,61 @@ function fallbackMarkdown(
     lines.push('## 还缺什么', '')
     for (const item of todos) lines.push(`- **${item.label}**：${item.hint}`)
     lines.push('')
+  }
+
+  return lines.join('\n')
+}
+
+/* ------------------------------------------------------------------ */
+/* 录像层                                                              */
+/* ------------------------------------------------------------------ */
+
+function replayMarkdown(input: SkillInput, name: string, analysis: ReplayAnalysis, code: string): string {
+  const slug = safeName(input.deckName)
+  const lines: string[] = []
+  lines.push('---')
+  lines.push(`name: "${slug}-${code}"`)
+  lines.push(`description: ${JSON.stringify(`对局录像「${name}」：展开流程与手坑命中点`)}`)
+  lines.push('---', '')
+  lines.push(`# 对局录像：${name}`, '')
+  lines.push(
+    `- 回合数：${analysis.turns}${analysis.incomplete ? '（录像未跑到终局）' : ''}`,
+    `- 起手 ${analysis.startingHand} 张：${analysis.openingHand.map(input.nameOf).join('、') || '—'}`,
+    '',
+  )
+
+  if (analysis.steps.length) {
+    lines.push('## 展开流程', '')
+    analysis.steps.forEach((step, index) => {
+      const where = step.turn ? `T${step.turn}${step.phase ? ` · ${step.phase}` : ''}` : ''
+      const who = step.player === 0 ? '我方' : '系统'
+      lines.push(`${index + 1}. 【${where || who}】${step.text}`)
+    })
+    lines.push('')
+  }
+
+  if (analysis.decisions.length) {
+    lines.push('## 关键选择', '')
+    for (const decision of analysis.decisions) {
+      const where = decision.turn ? `T${decision.turn}${decision.phase ? ` · ${decision.phase}` : ''}` : ''
+      lines.push(`- ${where ? `【${where}】` : ''}${decision.text}`)
+    }
+    lines.push('')
+  }
+
+  const hits = analysis.handtrapHits ?? []
+  lines.push('## 手坑命中点', '')
+  if (hits.length) {
+    lines.push('| 位置 | 手坑 | 触发点 | 后果 |')
+    lines.push('| --- | --- | --- | --- |')
+    for (const hit of hits) {
+      lines.push(`| ${hitPositionText(hit)} | ${hitNameText(hit)} | ${hit.trigger} | ${hitConsequenceText(hit)} |`)
+    }
+    lines.push('')
+    lines.push('> 录像里没有对手手牌，以上是「对手手上正好有这张卡」时的潜在命中点。', '')
+    if (hits.some((hit) => hit.dodged)) lines.push(`> ${HANDTRAP_FOOTNOTE}`, '')
+  } else {
+    lines.push('_没有识别到命中点（录像太短，或旧缓存还没重新解析）。_', '')
   }
 
   return lines.join('\n')

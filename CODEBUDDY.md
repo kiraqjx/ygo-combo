@@ -2,16 +2,17 @@
 
 ## 常用命令
 
-- `npm install` — 安装依赖（Vue 3 / Vite / Pinia / Vue Router / fflate / gifenc）。
+- `npm install` — 安装依赖（Vue 3 / Vite / Pinia / Vue Router / fflate / gifenc / ocgcore-wasm）。
 - `npm run dev` — 开发服务器，固定端口 5173；`/pics/*` 由 Vite 代理到 `cdn.233.momobako.com/ygopro/pics`，用于卡图同源（canvas 可读像素，GIF 导出依赖这一点）。
 - `npm run typecheck` — `vue-tsc --noEmit`，本仓库唯一可用的静态检查；提交前跑这个。
 - `npm run build` — `vue-tsc -b && vite build`，产物在 `dist/`；纯静态站点，History 路由需服务端回退到 `index.html`。
 - `npm run preview` — 预览构建产物（同样带 `/pics` 代理）。
+- `npm run assets:duel` — 跑 `scripts/fetch-duel-assets.mjs` 拉取对局资源到 `duel-assets/`（ocgcore 官方 Lua 脚本、卡名 / 效果描述）。仓库里已经有一份，除非内核升级导致脚本对不上才需要重跑。
 - 仓库没有配置 lint 与测试框架（无 Vitest / ESLint 脚本），也没有单测可跑。新增测试前需先引入 runner 并补充 npm script。
 
 ## 架构概览
 
-纯前端、无后端。数据只有两条持久化通道：IndexedDB（卡库缓存）与 localStorage（展开、手坑配置、主题）。
+纯前端、无后端。持久化通道：IndexedDB（卡库缓存 `ygo-infer`、录像与解析结果 `ygo-skill`）与 localStorage（展开、手坑配置、卡组、自定义卡、主题）。许可证是 AGPL-3.0-only（见根目录 `LICENSE`）。
 
 ### 领域模型（`src/types.ts`）
 
@@ -39,6 +40,8 @@
 
 `BUILTIN_HANDTRAPS` 是初始值，用户配置存 localStorage。store 每次 `commit()` 调用 `syncHandtrapRegistry()` 把自定义手坑写入模块级 `HANDTRAPS` / `HANDTRAP_MAP`，因此内核函数无需接收手坑列表。代价是：**手坑变了必须让上层重新计算**，`store.version` 计数器专门用于在 `computed` 中建立依赖（见 `LabView` 的 `analysis`）。
 
+注意：这里的手坑是**推演用**的抽象模型（`category` + `counting`），与下面的「录像手坑分析」是两套东西，互不共享配置。
+
 ### 卡库与检索（`src/lib/cardDb.ts`、`src/lib/search.ts`、`stores/cards.ts`）
 
 `loadCardDatabase()` 下载 ygocdb 的 `cards.zip` → fflate 解压 → `normalizeCard()` 归一化成 `CardData`（含小写检索串 `blob`、`frame`、`kinds`）→ JSON 缓存进 IndexedDB（`ygo-infer` DB）。卡库不可用时 `remoteSearch()` 回退到 ygocdb 在线接口。`searchCards()` / `collectFacets()` 在内存里做筛选与聚合，`App.vue` 挂载时触发 `cardStore.init()`。
@@ -49,11 +52,48 @@
 
 用正则从效果文本里识别"卡组加手 / 卡组特召 / 卡组送墓 / 墓地取牌 / 抽卡 / 丢弃自身"等事件，产出 `inferTiming()` / `makeTiming()`（卡牌 → 时序草稿）；`autoRuleMoves()` 依据卡种生成 `auto: true` 的 setup/settle 规则移动；`suggestHandtraps()` / `suggestTargets()` 给编辑器提供默认标记与卡组目标建议；`reuseAutoIds()` 在编辑器改动后复用旧的自动移动 id，避免手动连线失效。这里全是启发式规则，只在"选择卡片时"提供默认值，不参与推演。
 
+### 真实对局引擎（`src/lib/duel/*`）
+
+用 `ocgcore-wasm`（优先 JSPI 异步版，`!wasm?url` 加载，不支持时退回同步版）真正跑 OCG 规则。`duel-assets/` 是它需要的本地资源：`scripts/official/*.lua`（卡片脚本）、`descriptions.json`、`strings`，由 `session.ts` 通过 `ScriptStore` / `loadDuelStrings()` 喂给内核。
+
+- `session.ts`（`DuelSession`）—— 对象生命周期的唯一入口：`start()` / `waitForEnd()` / `snapshot()`；内部循环 `process()` → 处理消息 → `takeQuestion()` → 取答复。三种答复来源：界面（`waitAnswer`）、沙包 AI（`autoRespond`）、录像回放（`rawQueue` 直接把 `.yrp` 里的响应字节按序喂回）。同时产出三样东西：`state`（界面状态）、`logs`（人类可读日志）、**`signals`（结构化事件流）**。
+- `signals` 是录像手坑分析的**唯一数据源**。`DuelSignalKind` 见 `types.ts`：`summon` / `spsummon` / `flip`（召唤宣言）、`summoned` / `spsummoned` / `flipsummoned`（内核确认成功，被无效就没有这条）、`set`、`position`（表示形式变化）、`chain`（发动）、`solving` / `solved` / `negated`（连锁结算）、`move`（带 from/to 区域位与 reason 位）、`draw`、**`prompt`（SELECT_CHAIN 提问，表示此刻轮到谁决定要不要连锁）**。新增 kind 时要同步检查 `replayHandtraps.ts` 的 switch。
+- `replay.ts`（`analyzeReplay(bytes, resolveName)`）—— `.yrp` → `ReplayAnalysis`：`steps` / `decisions` / `handtrapHits` / `analysisVersion` / `incomplete`。解析是确定性的（同种子 + 同响应序列 → 同结果），所以结果会被缓存。
+- `replayHandtraps.ts`（`analyzeHandtrapHits(signals)`）—— 从事件流反推「假设对手手上有这些卡，能在第几步打断」。规则细节见下一节。
+- `replayStore.ts` —— IndexedDB（`ygo-skill` / `replays`）存 `.yrp` 原始字节 + 解析结果，卡组删除后录像不自动清理（保留 `deckName` 供孤儿清理）。
+- 其他：`yrp.ts`（解析录像头 / 卡组 / 随机种子）、`checkpoint.ts`（暂存恢复）、`interaction.ts` + `response.ts`（提问 → 候选 / 响应字节）、`auto.ts`（沙包策略）、`random.ts`（xoshiro256** 洗牌）、`labels.ts`（选项文案）、`cards.ts`（卡组 → 内核卡数据）。
+
+**约定：`DuelSignal` 只增不改语义**。改动信号结构或 kind 时要同时梳理 `replayHandtraps.ts` 与任何对 `signal.kind` 做 switch 的地方（目前只有它一个消费者）。
+
+### 录像手坑判定（`src/lib/duel/replayHandtraps.ts`）
+
+当前只支持 7 张：灰流丽、灵王的波动、无限泡影、屋敷童、幽鬼兔、锁鸟、原始生命态 尼比鲁。抽卡型手坑（增殖的G / 欢聚友伴系列）故意不体现。只报前 20 步（`MAX_STEP`）。
+
+判定原则：
+
+- **灰流丽**：`卡组 → 手卡 / 墓地 / 怪兽区`，且那次移动必须是效果处理（`reason` 含 `EFFECT`、不含 `COST`）。`REASON` 位掩码必须对照 `duel-assets/scripts/constant.lua`（`RELEASE=0x2`、`MATERIAL=0x8`、`EFFECT=0x40`、`COST=0x80`、`RULE=0x400`），**从卡组解放 / 当素材送墓不吃灰流丽**。
+- **屋敷童**：按结算结果判，`墓地 → 手卡 / 卡组 / 怪兽区 / 除外`；**不要按「发动位置在墓地」判**——墓地发动的效果去卡组找牌属于灰流丽。
+- **灵王的波动**：效果里含「把怪兽特殊召唤」就能无效整次发动。判据是「某条连锁的结算里出现了非场上区域 → 怪兽区」的移动，命中点记在**发动那一步**（不看 `reason`，仪式 / 融合召唤的 reason 常带 `MATERIAL` / `SPSUMMON`）。
+- **幽鬼兔**：只能炸**已经表侧表示在场**的卡。用 `faceUp` 账本（`MOVE` 的 position、`SET`、`position` 信号维护）+ 「变表侧至少隔了一条信号」判断，卡片自身发动（手卡置入魔陷区、盖卡刚翻开）炸不了。
+- **无限泡影**：场上的怪兽效果发动即可（能力允许时提前盖放，文案里注明当回合盖的不能发）。
+- **锁鸟**：只在**主要阶段（4 / 16）**、只由 `卡组 → 手卡` 的检索触发，每局一次；抽卡与特召都不触发。
+- **尼比鲁**：累计第 5 次我方召唤 / 特召。召唤要先记 `pending`，等内核的 `SUMMONED` / `SPSUMMONED` / `FLIPSUMMONED` 确认后才计数（被神字辈无效的召唤不计数）。
+- **自排连锁**：对手只能在整条连锁排完后响应最后一条。用 `prompt` 信号判断——两条 `chain` 同一人、连锁号相邻、中间没有轮到 player 1，就把前一条记为「盖住」。这些命中点**不删除**，而是 `dodged: true` + `dodgeNote`，让 AI 从文档里学到「自排连锁能规避手坑」。连锁定位要用 `chainId:chainSize`（连锁号每次组连锁都从 1 重来）。
+
+**约定：改判定规则必须 +1 `HANDTRAP_ANALYSIS_VERSION`**。解析结果按版本号缓存在 IndexedDB 里，版本对不上 `SkillsView` 会显示「手坑分析已过期」并隐藏旧结论，点「重新解析」才重跑内核。
+
+### Skill 包（`src/lib/skill.ts`、`src/lib/skillBundle.ts`、`views/SkillsView.vue`）
+
+把卡组 + 启动率配置 + 关联展开 + 录像分析拼成给 AI 读的 Markdown / 分片包（`00-router.md` + 各章节文件）。手坑表的单元格文案由 `replayHandtraps.ts` 的 `hitNameText()` / `hitConsequenceText()` 生成，规避条目会带脚注 `HANDTRAP_FOOTNOTE`。
+
 ### 视图与组件
 
 - `views/HomeView.vue`：宣传页 + 用 `analyzeCombo(createSampleCombo())` 实时展示示例结论。
 - `views/CardsView.vue`：检索列表 + 详情抽屉，可把卡直接转成时序、卡组或起手。
 - `views/LabView.vue`：工作坊编排层。持有 `interrupts`（当前应用的手坑注入点）、`selectedTimingId`、各类弹窗状态，把 `analysis` 分发给 `TimingTimeline`（流程与断链高亮）、`TimingEditor` / `ChainEditor` / `MoveRows`（段与移动编辑）、`ResistancePanel`（手坑报告、注入点选择）、`DeckSidebar`（卡组 / 起手）、`DuelPlayback`（动画演示）。
+- `views/DuelView.vue`：真实对局界面（`components/duel/DuelQuestionPanel.vue` 负责选项 / 选卡交互），打完可以「绑定到卡组」变成录像样本。
+- `views/RatesView.vue`：起手 / 启动率计算（`lib/rates.ts` + `ratesWorker.ts`）。
+- `views/SkillsView.vue`：录像列表、重新解析、Skill 包预览 / 导出。
 - `components/DuelPlayback.vue` → `DuelBoard.vue` / `DuelField.vue`：按 `PlaybackFrame[]` 逐帧播放；`lib/boardCanvas.ts` 是纯 canvas 布局与绘制（`layoutBoard` / `drawBoardFrame`），`lib/exportGif.ts` 用 gifenc 编码导出 GIF——卡图必须走同源 `/pics/`（`cardImageProxyUrl`），否则 canvas 被污染、导出失败。
 - 全局样式集中在 `src/style.css`；主题通过 `document.documentElement.dataset.theme`（`dark` / `light`，默认 dark）切换。
 
@@ -63,4 +103,8 @@
 
 ## 已知文档偏差
 
-`README.md` 的功能描述停留在旧模型（提到 `lib/engine.ts`、"检查点"、"备线 / Plan B"），这些概念在当前代码中已不存在（内核是 `lib/timeline.ts`，备线由手坑注入点 `Interrupt` + 链路破坏替代）。以代码为准；改架构时顺手修正 README。
+`README.md` 的功能描述停留在旧模型（提到 `lib/engine.ts`、"检查点"、"备线 / Plan B"，目录结构里也没有 `lib/duel/`），这些概念在当前代码中已不存在（内核是 `lib/timeline.ts`，备线由手坑注入点 `Interrupt` + 链路破坏替代）。以代码为准；改架构时顺手修正 README。
+
+## 许可证
+
+AGPL-3.0-only（全文见 `LICENSE`，`package.json` 里 `"license": "AGPL-3.0-only"`）。修改后通过网络提供服务时，同样需要按 AGPL-3.0 提供对应源码。

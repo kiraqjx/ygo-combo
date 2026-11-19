@@ -1,5 +1,10 @@
 import { DuelSession } from './session'
 import { parseReplay, type ParsedReplay } from './yrp'
+import {
+  analyzeHandtrapHits,
+  HANDTRAP_ANALYSIS_VERSION,
+  type ReplayHandtrapHit,
+} from './replayHandtraps'
 import type { DuelCapture } from './types'
 
 /**
@@ -51,6 +56,10 @@ export interface ReplayAnalysis {
   turns: number
   steps: ReplayStep[]
   decisions: ReplayDecision[]
+  /** 潜在的手坑命中点（按事件流反推，不是录像里实际发生的） */
+  handtrapHits?: ReplayHandtrapHit[]
+  /** 生成 handtrapHits 时的判定规则版本；和当前版本不一致就要重新解析 */
+  analysisVersion?: number
   /** 录像没跑到结束（响应不够 / 内核报错） */
   incomplete: boolean
   /** 内核给的最后一条错误 */
@@ -164,6 +173,8 @@ export async function analyzeReplay(
     turns: Math.max(turn, snapshot.state.turn),
     steps,
     decisions,
+    handtrapHits: analyzeHandtrapHits(session.signals),
+    analysisVersion: HANDTRAP_ANALYSIS_VERSION,
     incomplete: !snapshot.state.finished,
     kernelError,
   }

@@ -2,6 +2,7 @@ import type { CardData, ComboLine, DeckEntry } from '@/types'
 import type { ReplayAnalysis } from '@/lib/duel/replay'
 import type { HandtrapDef } from '@/lib/handtraps'
 import type { RatePlan } from '@/lib/rates'
+import { HANDTRAP_FOOTNOTE, hitConsequenceText, hitNameText, hitPositionText } from '@/lib/duel/replayHandtraps'
 import { buildRouteReport, type EndBoard, type RouteReport } from '@/lib/skillRoutes'
 import { buildSampleReport, type SampleReport } from '@/lib/skillSamples'
 
@@ -177,6 +178,7 @@ export function buildSkillJson(input: SkillInput): string {
         phase: decision.phase,
         choice: decision.text,
       })),
+      handtrapHits: analysis.handtrapHits ?? [],
     }
   })
 
@@ -532,6 +534,18 @@ function pushReplays(
         lines.push(`- ${where ? `【${where}】` : ''}${decision.text}`)
       }
       lines.push('')
+    }
+
+    const hits = analysis.handtrapHits ?? []
+    if (hits.length) {
+      lines.push('手坑命中点（按录像事件流反推，假设对手手上正好有这些卡）：', '')
+      lines.push('| 位置 | 手坑 | 触发点 | 后果 |')
+      lines.push('| --- | --- | --- | --- |')
+      for (const hit of hits) {
+        lines.push(`| ${hitPositionText(hit)} | ${hitNameText(hit)} | ${hit.trigger} | ${hitConsequenceText(hit)} |`)
+      }
+      lines.push('')
+      if (hits.some((hit) => hit.dodged)) lines.push(`> ${HANDTRAP_FOOTNOTE}`, '')
     }
 
     if (analysis.kernelError) lines.push(`_内核告警：${analysis.kernelError}_`, '')

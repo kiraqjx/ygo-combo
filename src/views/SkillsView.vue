@@ -6,6 +6,7 @@ import { useComboStore } from '@/stores/combos'
 import { useHandtrapStore } from '@/stores/handtraps'
 import type { ComboLine } from '@/types'
 import { analyzeReplay } from '@/lib/duel/replay'
+import { HANDTRAP_ANALYSIS_VERSION, hitNameText } from '@/lib/duel/replayHandtraps'
 import {
   bindReplay,
   listReplayBindings,
@@ -115,6 +116,7 @@ const fileGroups = computed<SkillFileGroup[]>(() => {
       files: take((name) => name === 'manifest.json' || name === '00-router.md'),
     },
     { id: 'lines', label: '展开', files: take((name) => name.startsWith('line-')) },
+    { id: 'replays', label: '对局样本', files: take((name) => name.startsWith('20-')) },
     { id: 'fallback', label: '兜底', files: take((name) => name.startsWith('90-')) },
     { id: 'cards', label: '卡效', files: take((name) => name.startsWith('cards/')) },
   ].filter((group) => group.files.length)
@@ -133,6 +135,11 @@ function selectFile(path: string) {
 function statusText(item: ReplayBindingMeta): string {
   if (!item.analysis) return item.error ? '解析失败' : '待解析'
   return item.analysis.ok ? `${item.analysis.turns} 回合 · 已解析` : '解析失败'
+}
+
+/** 缓存里的手坑分析是不是用旧规则跑出来的 */
+function staleHits(item: ReplayBindingMeta): boolean {
+  return !!item.analysis?.ok && item.analysis.analysisVersion !== HANDTRAP_ANALYSIS_VERSION
 }
 
 function statusTone(item: ReplayBindingMeta): string {
@@ -243,6 +250,8 @@ async function generate(force: boolean) {
       const record = await loadReplayBinding(meta.id)
       if (!record) continue
       let analysis = force ? null : record.analysis ?? null
+      // 旧缓存没有手坑分析 / 判定规则升过版：同一份录像重放一次就能补上，不需要重新录制
+      if (analysis?.ok && analysis.analysisVersion !== HANDTRAP_ANALYSIS_VERSION) analysis = null
       if (!analysis) {
         try {
           analysis = await analyzeReplay(record.bytes, nameOf)
@@ -420,11 +429,32 @@ function downloadBundle() {
                 <span>{{ sizeText(item.size) }}</span>
                 <span>{{ dateText(item.createdAt) }}</span>
                 <span class="replay-state" :class="statusTone(item)">{{ statusText(item) }}</span>
+                <span
+                  v-if="item.analysis?.ok && (staleHits(item) || !item.analysis.handtrapHits)"
+                  class="replay-state"
+                  :title="staleHits(item) ? '手坑判定规则升过版，点「重新解析」按新规则重跑' : '旧缓存里没有手坑分析，点「重新解析」补上'"
+                >
+                  {{ staleHits(item) ? '手坑分析已过期' : '手坑点待解析' }}
+                </span>
               </div>
               <div v-if="item.analysis && !item.analysis.ok" class="replay-error">
                 {{ item.analysis.error }}
               </div>
               <div v-else-if="!item.analysis && item.error" class="replay-error">{{ item.error }}</div>
+              <details v-if="item.analysis?.handtrapHits?.length && !staleHits(item)" class="replay-hits">
+                <summary>手坑点 {{ item.analysis.handtrapHits.length }} 处</summary>
+                <ul>
+                  <li
+                    v-for="hit in item.analysis.handtrapHits ?? []"
+                    :key="`${hit.id}-${hit.step}`"
+                    :class="{ 'hit-dodged': hit.dodged }"
+                  >
+                    <span class="hit-step">第 {{ hit.step }} 步</span>
+                    <strong>{{ hitNameText(hit) }}</strong>
+                    {{ hit.dodged ? hit.dodgeNote : hit.effect }}
+                  </li>
+                </ul>
+              </details>
             </div>
             <button class="btn xs danger" :disabled="generating" @click="remove(item)">移除</button>
           </div>
@@ -459,8 +489,8 @@ function downloadBundle() {
 
           <template v-if="view === 'bundle'">
             <div v-if="!bundle" class="empty-block">
-              点「生成 skill 包」后，这里会按「概览 / 每条启动点一份展开 / 兜底 / 卡效切片」拆成多个文件。
-              <br />AI 先读 00-router.md 判断 5 张起手是启动点、手坑还是废件，再只加载需要的那条路线。
+              点「生成 skill 包」后，这里会按「概览 / 每条启动点一份展开 / 对局样本 / 兜底 / 卡效切片」拆成多个文件。
+              <br />录像的展开流程与手坑命中点在「对局样本」里；AI 先读 00-router.md 判断 5 张起手，再按需加载。
             </div>
             <div v-else class="skill-bundle">
               <aside class="skill-files">
@@ -642,6 +672,39 @@ function downloadBundle() {
   color: var(--red);
   font-size: 11px;
   line-height: 1.6;
+}
+
+.replay-hits {
+  margin-top: 6px;
+  color: var(--text-mute);
+  font-size: 11px;
+}
+
+.replay-hits summary {
+  color: var(--gold);
+  cursor: pointer;
+}
+
+.replay-hits ul {
+  margin: 4px 0 0;
+  padding-left: 16px;
+  line-height: 1.75;
+}
+
+.replay-hits strong {
+  margin-right: 4px;
+  color: var(--text-dim);
+}
+
+.hit-step {
+  margin-right: 6px;
+  color: var(--text-mute);
+}
+
+/* 自排连锁规避的点：留在列表里说明「为什么这一步安全」，但弱化显示 */
+.replay-hits li.hit-dodged {
+  color: var(--text-mute);
+  opacity: 0.75;
 }
 
 .progress-note {

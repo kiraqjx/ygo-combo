@@ -1,24 +1,25 @@
-import type { CardData, ComboLine, DeckEntry } from '@/types'
+import type { CardData, DeckEntry } from '@/types'
 import { HANDTRAP_FOOTNOTE, hitConsequenceText, hitNameText, hitPositionText } from './duel/replayHandtraps'
-import type { ReplayAnalysis } from './duel/replay'
-import { HANDTRAP_MAP } from './handtraps'
+import type { ReplayAnalysis, ReplayStep } from './duel/replay'
 import { buildRateModel, openingChance } from './rates'
 import { buildSkillCoverage, type CoverageItem, type SkillInput } from './skill'
-import { buildRouteReport, type RouteReport } from './skillRoutes'
 import { buildSampleReport, listStarterClauses, type SampleReport } from './skillSamples'
 
 /**
  * 分片 skill 包（给 AI 的运行时形态）。
  *
  * 目标：AI 拿到 5 张起手后先只读路由层（2~4 KB），判断
- * 「哪些是启动点 / 手坑 / 废件」，再按路由表加载一条展开 skill（3~8 KB），
+ * 「哪些是启动点 / 手坑 / 废件」，再按路由表加载一条录像路线（3~8 KB），
  * 需要时才去看单卡完整文本。相比整份大文档，上下文短一个数量级。
+ *
+ * 路线唯一来源是录像（combo 工坊已废弃）：每份绑定到该卡组的 .yrp 一个分片，
+ * 按「起手是否包含启动条件的全部卡」挂到对应启动点。
  *
  * 产物结构（zip 内）：
  *   <卡组>-skill/manifest.json   机器可读：启动点、手坑、废件、卡号角色
- *   <卡组>-skill/00-router.md    手牌判断 + 路由规则 + 最伤手坑 + 覆盖度
- *   <卡组>-skill/10-line-XX.md   每个启动点一条：路线、分支、手坑、卡效
- *   <卡组>-skill/90-fallback.md  无启动点 / 未录入路线的兜底
+ *   <卡组>-skill/00-router.md    手牌判断 + 路由规则 + 覆盖度
+ *   <卡组>-skill/20-replay-XX.md 每份录像一条：起手、展开流程、手坑命中点
+ *   <卡组>-skill/90-fallback.md  无启动点 / 无录像的兜底
  *   <卡组>-skill/cards/<code>.md 被路线引用到的卡（完整效果文本）
  */
 
@@ -30,9 +31,10 @@ export interface BundleStarter {
   chance: number
   /** 后攻（多抽 1 张）命中概率 */
   secondChance: number
-  /** 已录入的路线；空数组表示这条启动点还没有展开 */
+  /** 路线文件：起手命中这套启动条件的录像（`20-replay-*.md`）；null 表示还没有录像用这张卡启动 */
   file: string | null
-  lines: { combo: string; line: string }[]
+  /** 命中这条启动点的录像 */
+  replays: { code: string; name: string }[]
 }
 
 export interface BundleReplay {
@@ -45,6 +47,26 @@ export interface BundleReplay {
   hits: number
   /** 被自排连锁规避、实际打不到的命中点数量 */
   dodged: number
+  /** 起手卡名（用于按当前手牌匹配「这条起手该怎么打」） */
+  opening: string[]
+  /** 我方前若干步操作（phase：text），给单步决策当路线参考 */
+  steps: string[]
+  /**
+   * 录像里每次「效果分支」提问实际选了哪个选项（去重）。
+   *
+   * 这类候选只有「从卡组仪式召唤 / 从手卡仪式召唤」这种通用名字，模型得自己
+   * 对照手卡才能判断，日志里就出现过手卡明明有「天羽羽斩之巳剑」却选了「从卡组」
+   * ——那一步选错，后面 No.90 的素材就不够了。直接把录像的选择标在候选上。
+   */
+  options: string[]
+  /**
+   * 录像里「选择卡片」时实际选中过的卡名（去重）。
+   *
+   * 有些 combo 的关键就在这张卡的归属上——录像是「两颗心灵检索混沌恶魔、
+   * 然后把混沌恶魔自己丢掉」，才能在墓地发动它的效果；模型只看到「丢弃 1 张手卡」，
+   * 规划时就写成了「丢弃效果遮蒙者」，链路当场断掉。
+   */
+  picks: string[]
 }
 
 export interface BundleManifest {
@@ -54,7 +76,6 @@ export interface BundleManifest {
   files: {
     router: string
     fallback: string
-    lines: string[]
     replays: string[]
     cards: string
   }
@@ -75,15 +96,28 @@ export interface SkillBundle {
   dir: string
 }
 
-interface RouteEntry {
-  comboName: string
-  line: ComboLine
-  report: RouteReport
-  cardIds: Set<number>
-}
-
 const MAX_CARD_TEXT = 1600
 const CARD_DIR = 'cards'
+/**
+ * 给单步决策的路线最多留多少步。
+ *
+ * 过滤噪声后一份完整 T1 展开 50 多步：截到 36 会把「超量 No.90 → 黑魔女 → 罪宝」
+ * 整段砍掉，规划时模型只看到前半段，后面自然写不出步骤。
+ */
+const REPLAY_STEPS_MAX = 60
+
+/**
+ * 只说明「连锁怎么结算的」的系统行，对「照着打」没有信息量。
+ * 一份展开里这类行能占一半以上，留着会把真正的操作挤出 prompt。
+ */
+const STEP_NOISE = [/^C\d+\s*结算$/, /^连锁结束$/, /^结算$/]
+
+function actionableSteps(steps: ReplayStep[]): ReplayStep[] {
+  return steps.filter((step) => {
+    const text = step.text.trim()
+    return !STEP_NOISE.some((pattern) => pattern.test(text))
+  })
+}
 
 export function buildSkillBundle(input: SkillInput): SkillBundle {
   const nameOf = input.nameOf
@@ -98,13 +132,7 @@ export function buildSkillBundle(input: SkillInput): SkillBundle {
   })
   const clauses = listStarterClauses({ plan: input.plan, starterGroups: input.starterGroups, nameOf })
 
-  const routes: RouteEntry[] = (input.lines ?? []).map((item) => ({
-    comboName: item.comboName,
-    line: item.line,
-    report: buildRouteReport(item.comboName, item.line),
-    cardIds: collectLineCardIds(item.line, entries, nameOf),
-  }))
-  const coverage = buildSkillCoverage(input, samples, routes.map((item) => item.report))
+  const coverage = buildSkillCoverage(input, samples)
 
   const handtrapDefs = (input.handtraps ?? []).filter(
     (def) => def.cardId && input.main.some((entry) => entry.id === def.cardId && entry.count > 0),
@@ -112,6 +140,68 @@ export function buildSkillBundle(input: SkillInput): SkillBundle {
   const handtrapIds = new Set(handtrapDefs.map((def) => def.cardId as number))
   const blockers = input.plan?.blockers ?? []
   const brickIds = new Set(blockers.flatMap((blocker) => blocker.cards.map((card) => card.id)))
+
+  // 录像：每份可解析的 .yrp 一个文件，含展开流程与手坑命中点
+  const replays: BundleReplay[] = []
+  const replayFiles: Record<string, string> = {}
+  /**
+   * 录像 → 启动点的关联依据。
+   *
+   * 工作坊已经废弃，combo 现在就是「录一局」。所以判定某条启动点有没有路线，
+   * 看的是录像起手里有没有这套启动条件的全部卡：单卡动点只要起手有那张就算，
+   * 两卡 combo 要求起手同时有这两张。
+   */
+  const replaySources: { code: string; file: string; name: string; opening: number[] }[] = []
+  input.bindings.forEach((binding, index) => {
+    const analysis = binding.analysis
+    if (!analysis?.ok) return
+    const code = `replay-${String(index + 1).padStart(2, '0')}`
+    const file = `20-${code}.md`
+    const allHits = analysis.handtrapHits ?? []
+    replays.push({
+      code,
+      file,
+      name: binding.name,
+      turns: analysis.turns,
+      incomplete: analysis.incomplete,
+      hits: allHits.filter((hit) => !hit.dodged).length,
+      dodged: allHits.filter((hit) => hit.dodged).length,
+      opening: (analysis.openingHand ?? []).map((id) => nameOf(id) || `#${id}`),
+      /**
+       * 给单步决策看的路线：只取我方动作，并滤掉「C1 结算 / 连锁结束」这类系统行。
+       *
+       * 之前直接 `slice(0, 10)` 整段日志，一份正常展开的前 10 行有一半是连锁结算，
+       * 主要阶段的巳剑展开根本进不了 prompt——模型只能看到抽卡阶段那几步，
+       * 于是「复现整条展开」无从谈起。
+       */
+      steps: actionableSteps(analysis.steps.filter((step) => step.player === 0))
+        .slice(0, REPLAY_STEPS_MAX)
+        .map((step) => `${step.phase}：${step.text}`),
+      options: [
+        ...new Set(
+          (analysis.decisions ?? [])
+            .filter((decision) => decision.kind === 'option')
+            .map((decision) => /「([^」]+)」/.exec(decision.text)?.[1] ?? '')
+            .filter(Boolean),
+        ),
+      ].slice(0, 24),
+      picks: [
+        ...new Set(
+          (analysis.decisions ?? [])
+            .filter((decision) => decision.kind === 'card')
+            .map((decision) => /「([^」]+)」/.exec(decision.text)?.[1] ?? '')
+            .filter(Boolean),
+        ),
+      ].slice(0, 40),
+    })
+    replaySources.push({
+      code,
+      file,
+      name: binding.name,
+      opening: (analysis.openingHand ?? []).slice(),
+    })
+    replayFiles[file] = replayMarkdown(input, binding.name, analysis, code)
+  })
 
   // 命中概率与路由层的「无启动点」口径一致：都扣掉废件超限的情况
   const model = buildRateModel(input.main, clauses, blockers)
@@ -124,7 +214,8 @@ export function buildSkillBundle(input: SkillInput): SkillBundle {
       name: slot.name || nameOf(slot.cardId) || `#${slot.cardId}`,
     }))
     const requiredIds = requires.map((item) => item.code)
-    const linked = routes.filter((item) => requiredIds.every((id) => item.cardIds.has(id)))
+    // 起手里包含这套启动条件的录像 = 这条启动点的实战路线
+    const fromReplays = replaySources.filter((item) => requiredIds.every((id) => item.opening.includes(id)))
     const code = `line-${String(index + 1).padStart(2, '0')}`
     starters.push({
       code,
@@ -132,8 +223,8 @@ export function buildSkillBundle(input: SkillInput): SkillBundle {
       requires,
       chance: openingChance(model, [clause], blockers, samples.handSize),
       secondChance: openingChance(model, [clause], blockers, samples.secondHandSize),
-      file: linked.length ? `${code}.md` : null,
-      lines: linked.map((item) => ({ combo: item.comboName, line: item.line.name })),
+      file: fromReplays[0]?.file ?? null,
+      replays: fromReplays.map((item) => ({ code: item.code, name: item.name })),
     })
   })
 
@@ -150,36 +241,36 @@ export function buildSkillBundle(input: SkillInput): SkillBundle {
   }
   for (const entry of input.main) roles[String(entry.id)] = roleOf(entry.id)
 
-  // 需要写完整卡效的卡：路线用到的 + 启动卡 + 手坑 + 废件
+  // 需要写完整卡效的卡：启动卡 + 手坑 + 废件 + 录像里实际用到的卡
   const usedCardIds = new Set<number>()
-  for (const route of routes) for (const id of route.cardIds) usedCardIds.add(id)
   for (const starter of starters) for (const item of starter.requires) usedCardIds.add(item.code)
   for (const id of handtrapIds) usedCardIds.add(id)
   for (const id of brickIds) usedCardIds.add(id)
-
-  // 录像：每份可解析的 .yrp 一个文件，含展开流程与手坑命中点
-  const replays: BundleReplay[] = []
-  const replayFiles: Record<string, string> = {}
-  input.bindings.forEach((binding, index) => {
+  /**
+   * 录像里出现过的卡也要收。
+   *
+   * 路线只写「检索『混沌之魔王-骸骨恶魔』」「发动『两颗心灵』」，不复述卡效；
+   * 模型要判断这张卡在构筑里的作用、检索该拿谁，就得能查到它的完整文本。
+   * 名字从路线文本里抠（`「…」`），只认这套卡组里真有的卡，避免把对手的卡也收进来。
+   */
+  const deckNameToId = new Map<string, number>()
+  for (const entry of entries) deckNameToId.set(entry.name || nameOf(entry.id), entry.id)
+  for (const binding of input.bindings) {
     const analysis = binding.analysis
-    if (!analysis?.ok) return
-    const code = `replay-${String(index + 1).padStart(2, '0')}`
-    const file = `20-${code}.md`
-    const allHits = analysis.handtrapHits ?? []
-    replays.push({
-      code,
-      file,
-      name: binding.name,
-      turns: analysis.turns,
-      incomplete: analysis.incomplete,
-      hits: allHits.filter((hit) => !hit.dodged).length,
-      dodged: allHits.filter((hit) => hit.dodged).length,
-    })
-    replayFiles[file] = replayMarkdown(input, binding.name, analysis, code)
-  })
+    if (!analysis?.ok) continue
+    const text = [
+      ...analysis.steps.map((step) => step.text),
+      ...analysis.decisions.map((decision) => decision.text),
+    ].join('\n')
+    for (const match of text.matchAll(/「([^」]+)」/g)) {
+      const id = deckNameToId.get(match[1])
+      if (id) usedCardIds.add(id)
+    }
+  }
 
   const manifest: BundleManifest = {
-    schemaVersion: 3,
+    // 5：路线只来自录像，去掉 10-line / lines 字段
+    schemaVersion: 7,
     deck: {
       name: input.deckName,
       main: total(input.main),
@@ -190,7 +281,6 @@ export function buildSkillBundle(input: SkillInput): SkillBundle {
     files: {
       router: '00-router.md',
       fallback: '90-fallback.md',
-      lines: starters.filter((starter) => starter.file).map((starter) => starter.file as string),
       replays: replays.map((item) => item.file),
       cards: `${CARD_DIR}/`,
     },
@@ -220,15 +310,8 @@ export function buildSkillBundle(input: SkillInput): SkillBundle {
     starters,
     handtrapDefs,
     coverage,
-    routes,
     replays,
   )
-
-  for (const starter of starters) {
-    if (!starter.file) continue
-    const linked = routes.filter((item) => starter.lines.some((line) => line.combo === item.comboName && line.line === item.line.name))
-    files[`${dir}/${starter.file}`] = lineMarkdown(input, starter, linked, samples)
-  }
 
   for (const [file, text] of Object.entries(replayFiles)) files[`${dir}/${file}`] = text
 
@@ -258,7 +341,6 @@ function routerMarkdown(
   starters: BundleStarter[],
   handtrapDefs: { id: string; name: string; category: string; cardId?: number }[],
   coverage: CoverageItem[],
-  routes: RouteEntry[],
   replays: BundleReplay[],
 ): string {
   const lines: string[] = []
@@ -286,7 +368,7 @@ function routerMarkdown(
           chance: round(starter.chance),
           secondChance: round(starter.secondChance),
           file: starter.file,
-          lines: starter.lines,
+          replays: starter.replays,
         })),
         handtraps: handtrapDefs.map((def) => ({ code: def.cardId, name: def.name, category: def.category })),
         bricks: manifest.bricks,
@@ -302,11 +384,12 @@ function routerMarkdown(
   if (!starters.length) {
     lines.push('_没有配置启动条件：先在「启动率」页设置启动组 / 启动条件。_', '')
   } else {
-    lines.push('| 编号 | 启动点 | 先攻命中 | 后攻命中 | 文件 |')
-    lines.push('| --- | --- | --- | --- | --- |')
+    lines.push('| 编号 | 启动点 | 先攻命中 | 后攻命中 | 文件 | 录像样本 |')
+    lines.push('| --- | --- | --- | --- | --- | --- |')
     for (const starter of starters) {
+      const replayText = starter.replays.map((item) => item.code).join('、') || '—'
       lines.push(
-        `| ${starter.code} | ${starter.label} | ${pct(starter.chance)} | ${pct(starter.secondChance)} | ${starter.file || '未录入'} |`,
+        `| ${starter.code} | ${starter.label} | ${pct(starter.chance)} | ${pct(starter.secondChance)} | ${starter.file || '未录入'} | ${replayText} |`,
       )
     }
     lines.push('')
@@ -353,16 +436,10 @@ function routerMarkdown(
   lines.push('- 多个启动点同时成立 → 先加载命中率最高的那个文件，其余只在它被拦断后再看；')
   lines.push('- 抽到手坑 → 不影响启动判定，但要少 1 个展开位，防守优先；')
   lines.push('- 废件超过 allowance：`never` 型直接判定无法启动，`leaveHand` 型视为可丢弃后继续；')
-  lines.push('- 只加载需要的 `10-line-*.md`；卡效在 `cards/<卡号>.md`，没遇到就别读。', '')
-
-  const worst = worstHandtraps(routes)
-  if (worst.length) {
-    lines.push('## 最伤手坑（跨路线）', '')
-    for (const item of worst.slice(0, 5)) {
-      lines.push(`- 「${item.name}」：${item.lines} 条路线会被打断，最狠的是「${item.headline}」`)
-    }
-    lines.push('')
-  }
+  lines.push(
+    '- 路线分片是 `20-replay-*.md`：里面就是实战打法的完整流程与手坑命中点，按启动点表格里的文件名加载；卡效在 `cards/<卡号>.md`，没遇到就别读。',
+    '',
+  )
 
   lines.push('## 覆盖度', '')
   lines.push('| 项 | 状态 | 详情 |')
@@ -375,120 +452,6 @@ function routerMarkdown(
   if (todos.length) {
     lines.push('待补：', '')
     for (const item of todos) lines.push(`- **${item.label}**：${item.hint}`)
-    lines.push('')
-  }
-
-  return lines.join('\n')
-}
-
-/* ------------------------------------------------------------------ */
-/* 展开层                                                              */
-/* ------------------------------------------------------------------ */
-
-function lineMarkdown(
-  input: SkillInput,
-  starter: BundleStarter,
-  routes: RouteEntry[],
-  samples: SampleReport,
-): string {
-  const lines: string[] = []
-  const slug = safeName(input.deckName)
-  lines.push('---')
-  lines.push(`name: "${slug}-${starter.code}"`)
-  lines.push(`description: ${JSON.stringify(`启动点「${starter.label}」的展开路线：终场、资源曲线、分支、手坑与卡效`)}`)
-  lines.push(`starter: "${starter.code}"`)
-  lines.push('---', '')
-  lines.push(`# 启动点：${starter.label}（${pct(starter.chance)}）`, '')
-  lines.push(`- 手牌要求：${starter.requires.map((item) => `${item.name}（${item.code}）`).join(' + ')}`)
-  lines.push(`- 先攻 ${samples.handSize} 张命中 ${pct(starter.chance)}；后攻 ${samples.secondHandSize} 张命中 ${pct(starter.secondChance)}`)
-  lines.push(`- 已录入路线：${starter.lines.map((item) => `${item.combo} / ${item.line}`).join('；') || '无'}`)
-  lines.push('')
-
-  if (!routes.length) {
-    lines.push('_这条启动点还没有关联展开，先回 `00-router.md` 看兜底方案。_', '')
-    return lines.join('\n')
-  }
-
-  for (const route of routes) {
-    const report = route.report
-    lines.push(`## 路线：${report.comboName} / ${report.lineName}`, '')
-    lines.push(`- 终场目标：${report.goal || '（未填写）'}`)
-    lines.push(`- 手牌 ${report.handSize} 张 · ${report.timings} 个时序 · 累计召唤 ${report.totalSummons} 次`)
-    for (const warning of report.warnings) lines.push(`- 注意：${warning}`)
-    lines.push('')
-
-    lines.push('### 终场盘面', '')
-    lines.push(...boardLines(report.endBoard))
-    lines.push('')
-
-    if (report.steps.length) {
-      lines.push('### 资源曲线（每步结算后）', '')
-      lines.push('| # | 操作 | 状态 | 手牌 | 前场 | 后场 | 墓地 | 除外 | 召唤 |')
-      lines.push('| --- | --- | --- | --- | --- | --- | --- | --- | --- |')
-      for (const step of report.steps) {
-        const r = step.resources
-        lines.push(
-          `| ${step.index + 1} | ${step.title} | ${statusText(step.status)} | ${r.hand} | ${r.field} | ${r.st} | ${r.gy} | ${r.banish} | ${r.summons} |`,
-        )
-      }
-      lines.push('')
-
-      lines.push('### 逐步操作', '')
-      for (const step of report.steps) {
-        lines.push(`#### 第 ${step.index + 1} 步 · ${step.title}`, '')
-        if (step.chains.length) lines.push(`- 连锁：${step.chains.join(' / ')}`)
-        if (step.links.length) lines.push(`- 上游链路：${step.links.join('；')}`)
-        for (const move of step.moves) lines.push(`- ${move}`)
-        if (step.reasons.length) lines.push(`- 推演说明：${step.reasons.join('；')}`)
-        lines.push('')
-      }
-    }
-
-    if (report.branches.length) {
-      lines.push('### 分支与风险', '')
-      lines.push('| 节点 | 条件 | 备选 | 风险 |')
-      lines.push('| --- | --- | --- | --- |')
-      for (const branch of report.branches) {
-        lines.push(`| 第 ${branch.step + 1} 步 | ${branch.condition} | ${branch.alternative} | ${branch.risk} |`)
-      }
-      lines.push('')
-    }
-
-    lines.push('### 这条路线的手坑', '')
-    // 只列真能命中的：无效 / 无法命中的手坑对这条路线没有决策价值
-    const hittable = report.handtraps.filter((item) => item.effective && item.sites.length > 0)
-    if (hittable.length) {
-      lines.push('| 手坑 | 判定 | 命中位置 | 影响 |')
-      lines.push('| --- | --- | --- | --- |')
-      for (const item of hittable) {
-        const sites = item.sites.map((index) => `第 ${index + 1} 步`).join('、')
-        lines.push(`| ${item.name} | ${item.verdictLabel} | ${sites} | ${item.headline} |`)
-      }
-    } else {
-      lines.push('- 这条路线没有标记可命中的手坑。')
-    }
-    lines.push('')
-
-    if (report.compromises.length) {
-      lines.push('### 吃手坑后的妥协盘面', '')
-      for (const compromise of report.compromises) {
-        lines.push(
-          `- 被「${compromise.handtrap}」（${compromise.headline}）：前场 ${listOrEmpty(compromise.endBoard.monsters)}；后场 ${listOrEmpty(compromise.endBoard.spells)}；手牌 ${listOrEmpty(compromise.endBoard.hand)}`,
-        )
-      }
-      lines.push('')
-    }
-
-    lines.push('### 本路线涉及的卡片', '')
-    const involved = [...route.cardIds]
-    for (const id of involved) {
-      const card = input.cardOf?.(id)
-      const name = card?.name || input.nameOf(id) || `#${id}`
-      const type = card?.typeLine ? `（${card.typeLine}）` : ''
-      lines.push(`- **${name}**${type}`)
-      const desc = (card?.desc || '').replace(/\s*\n+\s*/g, ' ').trim()
-      if (desc) lines.push(`  ${truncate(desc)}`)
-    }
     lines.push('')
   }
 
@@ -522,7 +485,10 @@ function fallbackMarkdown(
     lines.push('## 能启动但路线未录入', '')
     for (const starter of missing) lines.push(`- ${starter.code}：${starter.label}（命中率 ${pct(starter.chance)}）`)
     lines.push('')
-    lines.push('处理方式：按最接近的已录入路线近似，或把这条启动点补进「工作坊」后重新生成 skill。', '')
+    lines.push(
+      '处理方式：按最接近的已录入路线近似；最好是录一局用这条启动点展开的对局、绑定到卡组后重新生成 skill。',
+      '',
+    )
   }
 
   if (samples.groups.some((group) => group.kind === 'none')) {
@@ -536,8 +502,8 @@ function fallbackMarkdown(
   }
 
   lines.push('## 断链恢复', '')
-  lines.push('- 先看对应 `10-line-*.md` 的「分支与风险」表，确认断在哪一步；')
-  lines.push('- 再看「吃手坑后的妥协盘面」，选择仍然成立的后场 / 手牌留场；')
+  lines.push('- 回到对应 `20-replay-*.md`，按「展开流程」逐条对齐，确认断在哪一步；')
+  lines.push('- 再看该分片的「手坑命中点」：哪一步被拦、命中后原本还剩哪些场面，据此决定继续展开还是转防守；')
   lines.push('- 若断链发生在 route 的第 N 步，后面的步骤不要按原路线继续执行。', '')
 
   const todos = coverage.filter((item) => item.state !== 'ok' && item.hint)
@@ -568,9 +534,10 @@ function replayMarkdown(input: SkillInput, name: string, analysis: ReplayAnalysi
     '',
   )
 
-  if (analysis.steps.length) {
+  const flow = actionableSteps(analysis.steps)
+  if (flow.length) {
     lines.push('## 展开流程', '')
-    analysis.steps.forEach((step, index) => {
+    flow.forEach((step, index) => {
       const where = step.turn ? `T${step.turn}${step.phase ? ` · ${step.phase}` : ''}` : ''
       const who = step.player === 0 ? '我方' : '系统'
       lines.push(`${index + 1}. 【${where || who}】${step.text}`)
@@ -578,11 +545,24 @@ function replayMarkdown(input: SkillInput, name: string, analysis: ReplayAnalysi
     lines.push('')
   }
 
+  /**
+   * 决策序列按阶段串成一行。
+   *
+   * 一份正常展开有 150+ 条决策，逐行列出光这一段就 5 KB 以上，会把分片顶到
+   * `read_skill` 的截断线外面——模型只读到抽卡阶段，主要阶段的展开全丢。
+   * 串起来之后同样的信息只占几行，一次读完还能看清「发动 → 选项 → 选卡」的顺序。
+   */
   if (analysis.decisions.length) {
-    lines.push('## 关键选择', '')
+    lines.push('## 决策序列', '')
+    const groups = new Map<string, string[]>()
     for (const decision of analysis.decisions) {
       const where = decision.turn ? `T${decision.turn}${decision.phase ? ` · ${decision.phase}` : ''}` : ''
-      lines.push(`- ${where ? `【${where}】` : ''}${decision.text}`)
+      const list = groups.get(where) ?? []
+      list.push(decision.text)
+      groups.set(where, list)
+    }
+    for (const [where, items] of groups) {
+      lines.push(`- ${where ? `【${where}】` : ''}${items.join(' → ')}`)
     }
     lines.push('')
   }
@@ -632,83 +612,6 @@ function cardMarkdown(entry: DeckEntry, card: CardData | undefined, nameOf: (cod
 /* 工具                                                                */
 /* ------------------------------------------------------------------ */
 
-/** 一条展开链涉及到的卡号（起手 + 各时序的主卡 / 移动 / 连锁） */
-function collectLineCardIds(line: ComboLine, entries: DeckEntry[], nameOf: (code: number) => string): Set<number> {
-  const byName = new Map<string, number>()
-  for (const entry of entries) {
-    byName.set(entry.name.trim(), entry.id)
-    const resolved = (nameOf(entry.id) || '').trim()
-    if (resolved) byName.set(resolved, entry.id)
-  }
-  const ids = new Set<number>()
-  const addName = (name?: string) => {
-    if (!name) return
-    const id = byName.get(name.trim())
-    if (id) ids.add(id)
-  }
-
-  for (const card of line.opening) {
-    ids.add(card.id)
-    addName(card.name)
-  }
-  for (const timing of line.timings) {
-    if (timing.cardId) ids.add(timing.cardId)
-    addName(timing.cardName)
-    for (const list of [timing.setup, timing.cost, timing.effect, timing.settle]) {
-      for (const move of list) addName(move.cardName)
-    }
-    for (const chain of timing.chains) {
-      if (chain.cardId) ids.add(chain.cardId)
-      addName(chain.cardName)
-    }
-  }
-  return ids
-}
-
-function worstHandtraps(routes: RouteEntry[]): { name: string; lines: number; headline: string }[] {
-  const map = new Map<string, { name: string; lines: number; headline: string; weight: number }>()
-  for (const route of routes) {
-    for (const item of route.report.handtraps) {
-      if (!item.effective || item.verdict === 'safe') continue
-      const weight = item.verdict === 'lethal' ? 4 : item.verdict === 'danger' ? 3 : 2
-      const hit = map.get(item.id)
-      if (hit) {
-        hit.lines += 1
-        if (weight > hit.weight) {
-          hit.weight = weight
-          hit.headline = item.headline
-        }
-      } else {
-        map.set(item.id, {
-          name: item.name || HANDTRAP_MAP[item.id]?.name || item.id,
-          lines: 1,
-          headline: item.headline,
-          weight,
-        })
-      }
-    }
-  }
-  return [...map.values()].sort((a, b) => b.weight - a.weight || b.lines - a.lines)
-}
-
-function boardLines(board: { monsters: string[]; spells: string[]; hand: string[]; gy: string[]; banish: string[] }): string[] {
-  return [
-    `- 前场：${listOrEmpty(board.monsters)}`,
-    `- 后场：${listOrEmpty(board.spells)}`,
-    `- 手牌：${listOrEmpty(board.hand)}`,
-    `- 墓地：${listOrEmpty(board.gy)}`,
-    ...(board.banish.length ? [`- 除外：${board.banish.join('、')}`] : []),
-  ]
-}
-
-function statusText(status: string): string {
-  if (status === 'ok') return '正常'
-  if (status === 'partial') return '部分'
-  if (status === 'negated') return '被无效'
-  if (status === 'broken') return '断链'
-  return status
-}
-
 function coverageText(state: CoverageItem['state']): string {
   if (state === 'ok') return '达标'
   if (state === 'partial') return '部分'
@@ -729,10 +632,6 @@ function round(value: number): number {
 
 function truncate(text: string): string {
   return text.length > MAX_CARD_TEXT ? `${text.slice(0, MAX_CARD_TEXT)}…` : text
-}
-
-function listOrEmpty(list: string[]): string {
-  return list.length ? list.join('、') : '空'
 }
 
 function safeName(deckName: string): string {

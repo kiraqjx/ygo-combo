@@ -2,8 +2,8 @@
 
 ## 常用命令
 
-- `npm install` — 安装依赖（Vue 3 / Vite / Pinia / Vue Router / fflate / gifenc / ocgcore-wasm）。
-- `npm run dev` — 开发服务器，固定端口 5173；`/pics/*` 由 Vite 代理到 `cdn.233.momobako.com/ygopro/pics`，用于卡图同源（canvas 可读像素，GIF 导出依赖这一点）。
+- `npm install` — 安装依赖（Vue 3 / Vite / Pinia / Vue Router / fflate / ocgcore-wasm）。
+- `npm run dev` — 开发服务器，固定端口 5173；`/pics/*` 由 Vite 代理到 `cdn.233.momobako.com/ygopro/pics`，用于卡图同源（canvas 可读像素，GIF 导出依赖这一点）；`/api/llm/*` 代理到 `api.deepseek.com`（AI 代打用，目标可用 `VITE_LLM_PROXY_TARGET` 覆盖）。
 - `npm run typecheck` — `vue-tsc --noEmit`，本仓库唯一可用的静态检查；提交前跑这个。
 - `npm run build` — `vue-tsc -b && vite build`，产物在 `dist/`；纯静态站点，History 路由需服务端回退到 `index.html`。
 - `npm run preview` — 预览构建产物（同样带 `/pics` 代理）。
@@ -12,45 +12,29 @@
 
 ## 架构概览
 
-纯前端、无后端。持久化通道：IndexedDB（卡库缓存 `ygo-infer`、录像与解析结果 `ygo-skill`）与 localStorage（展开、手坑配置、卡组、自定义卡、主题）。许可证是 AGPL-3.0-only（见根目录 `LICENSE`）。
+纯前端、无后端。持久化通道：IndexedDB（卡库缓存 `ygo-infer`、录像与解析结果 `ygo-skill`）与 localStorage（手坑配置、卡组、自定义卡、主题）。许可证是 AGPL-3.0-only（见根目录 `LICENSE`）。
 
 ### 领域模型（`src/types.ts`）
 
-一个 `Combo`（展开）包含多条 `ComboLine`（展开链），每条展开链各自持有起手 `opening` + 卡组 `deck` + 有序的 `timings` 与 `goal`；`Combo` 只保留 `name` / `lines` / `activeLineId`，卡表、导出、导入是展开级操作。推演内核（`lib/timeline.ts`）接收的是单条 `ComboLine`。`Timing` 不是"事件标签"，而是一个时点上的完整结算过程，由四段 `CardMove[]` 组成并严格按序推演：
+只剩三件事：`CardData`（卡库归一化结果）、`DeckEntry`（卡号 + 卡名 + 张数）、以及录像侧的 `ReplayAnalysis`（见 `lib/duel/replay.ts`）。
 
-`setup`（发动时置入魔陷区，规则必发生）→ `cost`（必成功、不吃手坑）→ `effect`（可被手坑无效/封锁）→ `settle`（结算后送墓等，必发生）。`chains` 是 C2..Cn 的 `ChainEntry`，结构同上。
+combo 工坊（`Combo` / `ComboLine` / `Timing` / `CardMove` 那套手工编排模型）已经整体删除：现在「展开路线」就是一份绑定到卡组的 `.yrp` 录像。**不要再往这里加回手工模型**，否则又会分叉出两套路线语义。
 
-`CardMove` 的 `phase`（`cost` / `effect` / `auto`）、`handtraps`（该段可被哪些手坑阻止）、`unknown`（未知卡片，不参与按卡名连链）、`auto`（由规则自动生成）决定了整个推演语义。`Timing.manualLinks` / `ManualLink` 是自动连链失效时的兜底：手动声明"本步用到的卡来自上游某步的某次移动"。
+### 手坑定义（`src/lib/handtraps.ts` + `stores/handtraps.ts`）
 
-**约定：任何对 `Combo` 的修改都走 `stores/combos.ts` 的 action**（`addTiming` / `updateTiming` / `saveChain` / `patchCurrent` …），它们负责 `touch()` 更新时间戳；组件直接改 `combo` 字段会绕过持久化语义。
+`BUILTIN_HANDTRAPS` 是内置手坑（卡号 + 类别 + 配色），用户配置存 localStorage。起手样本（`skillSamples.ts`）与 skill 包的「手牌角色 / 手坑起手」会用到它；**手坑变了要让上层重新计算**，`store.version` 计数器就是给 `computed` 建依赖用的。
 
-### 推演内核（`src/lib/timeline.ts`）
-
-全项目最需要先读懂的文件：
-
-1. `initialLedger()` 用卡组 + 起手构建区域账本（`Record<ZoneId, Map<卡名, 数量>>`），未录满的手牌按 `UNKNOWN_CARD` 补足。
-2. `run(combo, { cancels, baseline, trackLinks })` 逐时序推进：先判断上游链是否断裂 → 记录状态（`ok` / `broken` / `negated` / `partial`）→ 按 setup / cost / 连锁发动 / effect / 连锁结算 / settle 依次落账，产出 `TimingState[]`、`TimingLink[]` 与逐动作 `PlaybackFrame[]`。
-3. `buildCancels()` 把「某时序 + 某手坑」翻译成被取消的移动集合：`category: 'negate'` 的整段无效该时序全部 `effect` 移动，`lock` / `zone` 类只取消被打标记的那几段。
-4. `analyzeTimeline()` 先跑基准（无手坑），再跑带 `cancels` 的版本，用基准链路 + `resolveManualLinks()` 计算出最终 `links`，并把"产出段被取消 / 任一端断链"的链路标 `broken`。
-5. `handtrapReports()` 对每个手坑的每个可命中时点各模拟一次，取对展开最不利的结果（最早断线、断线最多）作为 `deadAt` / `verdict` / `headline`。
-
-推演近似规则（改动内核时不要破坏）：cost 与 setup/settle 永不被手坑取消；从 `deck` / `extra` 取牌不校验余量，其他区域不足只记 reason 不中断；同名卡必须来自同一区域才连链；资源链断裂会向下游传播。
-
-### 手坑注册表（`src/lib/handtraps.ts` + `stores/handtraps.ts`）
-
-`BUILTIN_HANDTRAPS` 是初始值，用户配置存 localStorage。store 每次 `commit()` 调用 `syncHandtrapRegistry()` 把自定义手坑写入模块级 `HANDTRAPS` / `HANDTRAP_MAP`，因此内核函数无需接收手坑列表。代价是：**手坑变了必须让上层重新计算**，`store.version` 计数器专门用于在 `computed` 中建立依赖（见 `LabView` 的 `analysis`）。
-
-注意：这里的手坑是**推演用**的抽象模型（`category` + `counting`），与下面的「录像手坑分析」是两套东西，互不共享配置。
+注意：这里的 `category` / `counting` 只是起手统计用的分类，与「录像手坑判定」（`lib/duel/replayHandtraps.ts`）是两套规则，互不共享配置。模块级 `HANDTRAPS` / `HANDTRAP_MAP` 注册表已随推演内核一起删除。
 
 ### 卡库与检索（`src/lib/cardDb.ts`、`src/lib/search.ts`、`stores/cards.ts`）
 
 `loadCardDatabase()` 下载 ygocdb 的 `cards.zip` → fflate 解压 → `normalizeCard()` 归一化成 `CardData`（含小写检索串 `blob`、`frame`、`kinds`）→ JSON 缓存进 IndexedDB（`ygo-infer` DB）。卡库不可用时 `remoteSearch()` 回退到 ygocdb 在线接口。`searchCards()` / `collectFacets()` 在内存里做筛选与聚合，`App.vue` 挂载时触发 `cardStore.init()`。
 
-卡库只有正式服数据，先行服 / 新卡搜不到，因此 `lib/customCards.ts` 支持手动录入（只写卡名、种类、可选卡号与效果文本），存 localStorage，并由 `stores/cards.ts` 与下载卡库合并成 `store.cards`（`library` 是下载库，`custom` 是本地库），检索、卡组、启动率、工坊都走合并后的列表。自定义卡没有卡图，`App.vue` 用捕获阶段的全局 `error` 监听把失败的 `<img>` 换成 `CARD_PLACEHOLDER`。
+卡库只有正式服数据，先行服 / 新卡搜不到，因此 `lib/customCards.ts` 支持手动录入（只写卡名、种类、可选卡号与效果文本），存 localStorage，并由 `stores/cards.ts` 与下载卡库合并成 `store.cards`（`library` 是下载库，`custom` 是本地库），检索、卡组、启动率都走合并后的列表。自定义卡没有卡图，`App.vue` 用捕获阶段的全局 `error` 监听把失败的 `<img>` 换成 `CARD_PLACEHOLDER`。
 
 ### 文本推断（`src/lib/infer.ts`）
 
-用正则从效果文本里识别"卡组加手 / 卡组特召 / 卡组送墓 / 墓地取牌 / 抽卡 / 丢弃自身"等事件，产出 `inferTiming()` / `makeTiming()`（卡牌 → 时序草稿）；`autoRuleMoves()` 依据卡种生成 `auto: true` 的 setup/settle 规则移动；`suggestHandtraps()` / `suggestTargets()` 给编辑器提供默认标记与卡组目标建议；`reuseAutoIds()` 在编辑器改动后复用旧的自动移动 id，避免手动连线失效。这里全是启发式规则，只在"选择卡片时"提供默认值，不参与推演。
+只剩启动率要用的部分：`pickEffectSegment()` 从多段效果（①②③）里挑要建模的那一段（优先墓地 / 丢弃触发段），`inferRateOps()` 抽出抽滤算子——看牌库顶 N 张 / 其中拿 M 张 / 其余送墓或除外，抽 N 张，丢 N 张手卡。原来的「卡片 → 时序草稿」推断（`inferTiming` / `autoRuleMoves` / `suggestHandtraps` / `suggestTargets` / `reuseAutoIds`）已随工坊删除。
 
 ### 真实对局引擎（`src/lib/duel/*`）
 
@@ -84,26 +68,55 @@
 
 ### Skill 包（`src/lib/skill.ts`、`src/lib/skillBundle.ts`、`views/SkillsView.vue`）
 
-把卡组 + 启动率配置 + 关联展开 + 录像分析拼成给 AI 读的 Markdown / 分片包（`00-router.md` + 各章节文件）。手坑表的单元格文案由 `replayHandtraps.ts` 的 `hitNameText()` / `hitConsequenceText()` 生成，规避条目会带脚注 `HANDTRAP_FOOTNOTE`。
+把卡组 + 启动率配置 + 绑定的录像（**唯一的路线来源**）+ 手坑定义拼成给 AI 读的 Markdown / 分片包（`00-router.md` + `20-replay-*.md` + `90-fallback.md` + `cards/`）。手坑表的单元格文案由 `replayHandtraps.ts` 的 `hitNameText()` / `hitConsequenceText()` 生成，规避条目会带脚注 `HANDTRAP_FOOTNOTE`。
+
+`buildSkillBundle()` 用**录像起手**（`analysis.openingHand`）把录像挂到启动点——单卡动点要求起手有那张卡，两卡 combo 要求两张同时在起手。命中的录像写进 `BundleStarter.replays`，`starter.file` 指向该录像分片；`manifest.schemaVersion` 为 5。`skillContext.ts` 的 prompt 索引会额外生成「启动点 → 路线文件」的紧凑摘要，避免 router 被 `ROUTER_MAX` 截断后模型不知道读哪个分片。
+
+`buildSkillCoverage()` 的 routes / branches / handtraps / endBoard 四项全部由录像推导（可解析份数、命中点数量、跑到终局的份数）；没有录像时只能靠 `90-fallback.md`。
+
+录像步骤有两处**必须压缩**，否则 AI 复现不出完整展开：`actionableSteps()` 滤掉「C1 结算 / 连锁结束」这类系统行（一份展开里这类行占一半以上），单步决策只留前 `REPLAY_STEPS_MAX`（36）步我方动作；`20-replay-*.md` 的「决策序列」按阶段用 `→` 串成一行而不是逐条列出——150+ 条逐行会到 5 KB 以上，把分片顶出 `read_skill` 的截断线，模型只读到抽卡阶段。录像里出现过的卡（名字从步骤文本的 `「…」` 抠，只认卡组里真有的）也会生成 `cards/<code>.md`，否则模型不知道「检索谁」「墓效干什么」。
+
+### AI 代打（`src/lib/ai/*`）
+
+`DuelView` 开「AI 代打」后由 `AgentRunner` 接管我方应答。它只是 `session.answer()` 的又一个调用方，**不改内核循环**：`onQuestion` 拿到提问 → 算响应 → 交回 `session.answer()`。
+
+状态机是「规划 → 执行 → 打断重规划」：
+
+1. `planRoute()` 在**轮到我方决策的第一次提问**触发（不再限定 `idle`：这套构筑的展开从抽卡阶段就开始了，等到主要阶段才规划，前面几条连锁已经按单步直觉打完，路线接不上），把起手 / 卡组 / skill 索引交给模型，产出 `Plan`（route / goal / steps / avoid / handtraps）。**与起手匹配的录像路线（`pickReplayRoute`，完整步骤）直接拼进规划 prompt**，不指望模型自己想起来 `read_skill`——路线就是本卡组的真打法，规划偏离它，后面按路线执行时必然步步对不上。规划阶段仍允许 `read_skill` 按需读分片（**规划不用 json 模式**，因为 json mode 与 tools 同时用容易被网关拒绝，改为从文本里抠 JSON）。
+2. `Plan` 在手时**执行段不调模型**：`matchPlanStep()` 用「动作词 + 卡名」对上候选就照路线走；对不上由 `executeRoute()` 本地裁定（连锁放弃响应、主要阶段收尾、取牌按 墓地 > 卡组 > 手卡 > 场上 顺序），解放 / 弃手卡 / 格位也不逐条问模型。这一步是用户明确要求的「路线定了直接打」。**两个例外**：`option`（效果分支）候选只有「伤害改变 / 盖放魔陷」这种脱离卡名的名字，一律交给模型；`yesno` 的效果确认（`SELECT_EFFECTYN`）按路线点名的卡判——路线写了要发动的卡就答「是」，否则 `autoRespond` 固定答「否」会把链路断在这里。
+3. `decide()` 只用于三种情形：**还没有 Plan**（规划失败 / 未开规划）、**刚检测到打断、新 Plan 还没拿到**、以及上面的 `option` 分支提问。它发「局面 + 编号候选 + Plan」的小 prompt，用 json 模式且不带工具。
+4. `scanSignals()` 每步只看新增的 `signals`：对手 `chain` 或 `negated` 记为打断，下一次规划前重规划。跨回合清空 `Plan`。
+
+**偏离判定只有四个信号**（故意保守，避免正常展开被反复重规划）：跨回合、对手打断、`planExhausted()`——即 route 里点名要用的卡**全部**进了墓地 / 除外、`unmatched >= MAX_UNMATCHED`——即连续 3 步路线都没覆盖到当前岔路。卡组内容不可见，所以用 `cardZones()` 从信号流重建每张卡最后一次落点；从没移动过的卡视为仍在手卡 / 卡组。手动接管后 `reset()` **保留 Plan 与 usedSteps**（只清 history 与信号游标），重新接管会继续照原路线执行。
+
+关键约束：
+
+- **候选必须枚举成 1 起的编号**，模型只回编号，编号 → `OcgResponse` 是确定性映射（`question.ts`）。选卡 / 解放 / 数值是**多选**（`action` 是编号数组，具体组合由 `buildAnswerResponse` 组装，因为 2^n 种组合没法枚举）；表示形式是单选。格位（`place`）与排序（`sort`）仍走 `autoRespond`：格位候选多、选错会被判非法，`SORT_CHAIN` 的响应编码在既有实现里本来就走 `SORT_CARD` 兜底。
+- 多选如果「必须全选」（可选项数 = `min`）就直接作答，不问模型。多选模型连续两次给不出合法组合时整体降级为 `autoRespond`，不猜组合。
+- **`handled` 去重不能用「见过就跳过」**：内核 `RETRY` 会把**同一个提问对象**重新抛出（见 `session.ts` 的 `resolveAnswer(..., true)`），跳过就永久卡死。现在用 `busy`（并发去重）+ `answered`（已提交，再出现说明是 RETRY，允许重算）。
+- 模型返回空白 `content`（JSON 不合规被 API 换成空格、`finish_reason` 仍是 `stop`）必须显式判空并重试。
+- 两次都拿不到有效动作时退到最保守动作（放弃响应 > 结束回合），不能让内核空转。
+- 模型地址默认 `/api/llm`：浏览器直连 `api.deepseek.com` 没有 CORS 头。Vite 在 `server.proxy` / `preview.proxy` 转发，生产要在反代上配同样的 location，目标地址可用 `VITE_LLM_PROXY_TARGET` 覆盖。
+- 配置存 localStorage（`ygo-ai-config`），不进 skill 包、不写对局记录。`AgentRunner` 持有 `liveAiConfig` 引用，设置改动即时生效。
+- **skill 输入必须带当前卡组的录像**（`DuelView` 的 `skillBindings` / `loadSkillBindings()`）：录像就是路线来源，`skillCache` 的 key 里含录像 id 列表，换录像要重算。之前这里传空数组，模型永远看不到录过的打法。
+- **单步决策的候选会带上录像步骤标注**：`pickReplayRoute()` 用「手卡 + 墓地 + 当前连锁」当焦点挑一条录像，`alignReplaySteps()` 按「动作词 + 卡名」把候选对到 `〔录像第 N 步：…〕`（`不发动` / `取消` / `结束回合` 这类负面候选不参与，否则「不发动」会被当成「发动」）。`option`（效果分支）提问还必须在标题里点名「正在处理『某卡』的效果」，因为内核只给「伤害改变 / 盖放魔陷」这种脱离卡名的分支名，模型单看候选无法和录像对上。
+- **`AgentTrace` 是对外的决策日志**：每条带 `kind`（`plan` / `replan` / `decide` / `auto` / `fallback` / `interrupt`）、`title`、`detail`、模型给的 `reason`、候选数、耗时与 token 增量（`mark()` / `since()` 算差值）。`DuelView` 把它渲染成右侧日志抽屉，`auto` 类（唯一候选、只能全选）默认折叠。加新的决策分支时记得补一条 trace，否则界面上会「跳步」。**日志抽屉支持「导出日志」**（`DuelView.buildAiLogReport()` → `ai-log-<卡组>-<时间>.md`）：除了每条 trace 的完整请求 / 返回，还打包了模型配置（密钥省略）、skill 是否加载、录像解析状态、当前盘面与累计用量——排查「为什么没照录像打」光看 trace 是看不出 skill 有没有生效的。日志裁剪（`AI_LOG_MAX`）优先保留 `plan` / `replan` / `interrupt`，否则一整局的流水会把开局的规划挤掉。
 
 ### 视图与组件
 
-- `views/HomeView.vue`：宣传页 + 用 `analyzeCombo(createSampleCombo())` 实时展示示例结论。
-- `views/CardsView.vue`：检索列表 + 详情抽屉，可把卡直接转成时序、卡组或起手。
-- `views/LabView.vue`：工作坊编排层。持有 `interrupts`（当前应用的手坑注入点）、`selectedTimingId`、各类弹窗状态，把 `analysis` 分发给 `TimingTimeline`（流程与断链高亮）、`TimingEditor` / `ChainEditor` / `MoveRows`（段与移动编辑）、`ResistancePanel`（手坑报告、注入点选择）、`DeckSidebar`（卡组 / 起手）、`DuelPlayback`（动画演示）。
+- `views/HomeView.vue`：宣传页 + 一行状态数字（卡池张数 / 手坑定义数 / 录像路线来源）。
+- `views/CardsView.vue`：检索列表 + 详情抽屉（外链 ygocdb）。
+- `views/DeckView.vue`：卡组构建 / 导入导出 / 竖版长图。
 - `views/DuelView.vue`：真实对局界面（`components/duel/DuelQuestionPanel.vue` 负责选项 / 选卡交互），打完可以「绑定到卡组」变成录像样本。
 - `views/RatesView.vue`：起手 / 启动率计算（`lib/rates.ts` + `ratesWorker.ts`）。
-- `views/SkillsView.vue`：录像列表、重新解析、Skill 包预览 / 导出。
-- `components/DuelPlayback.vue` → `DuelBoard.vue` / `DuelField.vue`：按 `PlaybackFrame[]` 逐帧播放；`lib/boardCanvas.ts` 是纯 canvas 布局与绘制（`layoutBoard` / `drawBoardFrame`），`lib/exportGif.ts` 用 gifenc 编码导出 GIF——卡图必须走同源 `/pics/`（`cardImageProxyUrl`），否则 canvas 被污染、导出失败。
+- `views/SkillsView.vue`：录像列表（导入 / 单份导出 `.yrp` / 移除）、重新解析、Skill 包预览 / 导出。单份导出直接写 `loadReplayBinding()` 拿到的原始字节，和当初导入的文件一致。
 - 全局样式集中在 `src/style.css`；主题通过 `document.documentElement.dataset.theme`（`dark` / `light`，默认 dark）切换。
 
-### 内置示例数据
-
-`src/data/sampleCombo.ts` 是唯一内置示例：内容为真实导出的 combo JSON（单条展开链），`createSampleCombo()` 每次返回深拷贝，避免编辑污染源数据；`stores/combos.ts` 只在首次访问（无本地数据）时用它播种，工坊里没有「示例」按钮。旧版扁平结构（卡组 / 起手 / timings 在顶层）与更旧的 `steps` 数据都会在 `normalizeCombo()` / `migrateLegacy()` 里自动转成单链展开。
+> 工坊留下的一批组件（`TimingTimeline` / `TimingEditor` / `ChainEditor` / `MoveRows` / `ResistancePanel` / `DeckSidebar` / `ComboCards` / `CardPicker` / `HandtrapEditor` / `DuelPlayback` / `DuelBoard` / `DuelField`）和各视图里的入口都已删除；`src/style.css` 里仍留有部分未引用的旧样式，清理时按类名逐个确认（动态拼接的类名不能靠 grep 判定）。
 
 ## 已知文档偏差
 
-`README.md` 的功能描述停留在旧模型（提到 `lib/engine.ts`、"检查点"、"备线 / Plan B"，目录结构里也没有 `lib/duel/`），这些概念在当前代码中已不存在（内核是 `lib/timeline.ts`，备线由手坑注入点 `Interrupt` + 链路破坏替代）。以代码为准；改架构时顺手修正 README。
+`README.md` 与本文档都按「录像即路线」的现状描述。历史上曾经存在手工编排模型（`lib/engine.ts` → `lib/timeline.ts`、检查点、备线 / Plan B），这些都已彻底删除，文档里不应再出现。改架构时**同时**更新 README 与本文件，避免再次漂移。
 
 ## 许可证
 

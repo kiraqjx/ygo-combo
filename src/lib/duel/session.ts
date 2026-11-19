@@ -498,8 +498,14 @@ export class DuelSession {
     }
     this.busy = false
     this.pendingQuestion = question
+    // 先挂上「等待回答」再通知界面。
+    //
+    // onQuestion 是同步调用的，自动答题（AI 代打、确定性短路、降级）可能在回调里
+    // 立刻调用 answer()。如果此时 answerResolve 还没建立，这个响应会被直接丢弃，
+    // 内核就永远停在这一步等人工——表现就是「明明开着 AI，还要我自己点素材」。
+    const answered = this.waitAnswer()
     this.emit()
-    const response = await this.waitAnswer()
+    const response = await answered
     this.busy = true
     this.pendingQuestion = null
     return response

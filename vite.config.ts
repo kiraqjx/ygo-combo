@@ -131,6 +131,23 @@ function duelAssetPlugin(): Plugin {
   }
 }
 
+/**
+ * 模型接口反代。
+ *
+ * 浏览器直连 api.deepseek.com 没有 CORS 头，密钥也不该裸露在跨域请求里，
+ * 所以统一走同源 `/api/llm`，由这里转发。生产部署需要在反向代理上配同样的
+ * location（见 README 的部署说明），目标地址可以用 VITE_LLM_PROXY_TARGET 覆盖。
+ */
+const LLM_PROXY_TARGET = process.env.VITE_LLM_PROXY_TARGET || 'https://api.deepseek.com'
+
+const llmProxy = {
+  '/api/llm': {
+    target: LLM_PROXY_TARGET,
+    changeOrigin: true,
+    rewrite: (path: string) => path.replace(/^\/api\/llm/, ''),
+  },
+}
+
 export default defineConfig({
   plugins: [vue(), cardImagePlugin(), duelAssetPlugin()],
   resolve: {
@@ -140,6 +157,10 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    proxy: llmProxy,
+  },
+  preview: {
+    proxy: llmProxy,
   },
   build: {
     target: 'es2020',

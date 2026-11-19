@@ -116,23 +116,6 @@ export const BUILTIN_HANDTRAPS: HandtrapDef[] = [
   },
 ]
 
-/**
- * 当前生效的手坑列表。
- * 用「原地更新」而不是重新赋值，这样已经有静态 import 的地方（推理内核、时间线）
- * 也能读到用户在配置面板里改过的内容。
- */
-export const HANDTRAPS: HandtrapDef[] = [...BUILTIN_HANDTRAPS]
-export const HANDTRAP_MAP: Record<string, HandtrapDef> = {}
-
-export function syncHandtrapRegistry(defs: HandtrapDef[]) {
-  HANDTRAPS.length = 0
-  HANDTRAPS.push(...defs)
-  for (const key of Object.keys(HANDTRAP_MAP)) delete HANDTRAP_MAP[key]
-  for (const def of defs) HANDTRAP_MAP[def.id] = def
-}
-
-syncHandtrapRegistry(BUILTIN_HANDTRAPS)
-
 export const CATEGORY_LABEL: Record<TrapCategory, string> = {
   draw: '抽牌型',
   lock: '封锁型',

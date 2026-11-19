@@ -19,10 +19,22 @@ import {
   type DuelCheckpoint,
 } from '@/lib/duel/checkpoint'
 import type { DuelCardView, DuelDeck, DuelEvent, DuelPlayerId, DuelQuestion } from '@/lib/duel/types'
+import { useHandtrapStore } from '@/stores/handtraps'
+import { AgentRunner, type AgentStats, type AgentStatus, type AgentTrace } from '@/lib/ai/agent'
+import type { Plan } from '@/lib/ai/prompt'
+import { isAiReady, loadAiConfig, saveAiConfig, type AiConfig } from '@/lib/ai/config'
+import { buildSkillSource, type SkillSource } from '@/lib/ai/skillContext'
+import { renderBoard } from '@/lib/ai/board'
+import { buildSkillBundle } from '@/lib/skillBundle'
+import { listReplayBindings } from '@/lib/replayStore'
+import { downloadText } from '@/lib/toast'
+import type { SkillBindingInput, SkillInput } from '@/lib/skill'
 import DuelQuestionPanel from '@/components/duel/DuelQuestionPanel.vue'
+import ModelSettings from '@/components/ai/ModelSettings.vue'
 
 const deckStore = useDeckStore()
 const cardStore = useCardStore()
+const handtrapStore = useHandtrapStore()
 
 const session = shallowRef<DuelSession | null>(null)
 const version = ref(0)
@@ -111,6 +123,417 @@ function describeOption(raw: bigint | number): string {
   return lines[index] ?? card.name
 }
 
+/* ---------------------------------------------------------------- */
+/* AI 代打：起手规划路线 → 沿路线执行 → 被手坑打断才重规划             */
+/* ---------------------------------------------------------------- */
+
+const aiConfig = ref<AiConfig>(loadAiConfig())
+/** runner 持有这个对象的引用，设置改动即时生效，不用重开对局 */
+const liveAiConfig: AiConfig = { ...aiConfig.value }
+const aiSettingsOpen = ref(false)
+const aiEnabled = ref(false)
+const aiStatus = ref<AgentStatus>('idle')
+const aiReason = ref('')
+const aiError = ref('')
+const aiStats = ref<AgentStats | null>(null)
+const agent = shallowRef<AgentRunner | null>(null)
+
+/** 决策日志：规划、每一步选择、打断与降级都会追加到这里 */
+const aiLog = ref<AgentTrace[]>([])
+const aiLogOpen = ref(false)
+/** 是否连「唯一候选 / 沿路线执行」这类没有模型参与的步骤也显示 */
+const aiLogAll = ref(false)
+const aiPlan = ref<Plan | null>(null)
+
+const aiReady = computed(() => isAiReady(aiConfig.value))
+const aiBusy = computed(() => aiStatus.value === 'planning' || aiStatus.value === 'thinking')
+
+const AI_LOG_KINDS: Record<AgentTrace['kind'], string> = {
+  plan: '规划',
+  replan: '重规划',
+  decide: '决策',
+  auto: '自动',
+  fallback: '降级',
+  interrupt: '打断',
+  switch: '接管',
+}
+
+/** 日志保留条数：一条完整展开能有上百步，留太少会把开局的规划挤掉 */
+const AI_LOG_MAX = 300
+
+/**
+ * 追加一条日志。
+ *
+ * 裁剪时**优先保住规划 / 重规划 / 打断**：排查「为什么没照录像打」看的就是这几条，
+ * 让后面几百条「唯一候选」把它们挤出去，导出的日志就只剩流水账了。
+ */
+function appendAiLog(entry: AgentTrace): AgentTrace[] {
+  const next = [...aiLog.value, entry]
+  if (next.length <= AI_LOG_MAX) return next
+  const keep = next.filter(
+    (item) => item.kind === 'plan' || item.kind === 'replan' || item.kind === 'interrupt',
+  )
+  const rest = next.filter((item) => !keep.includes(item))
+  const budget = Math.max(AI_LOG_MAX - keep.length, 50)
+  return [...keep, ...rest.slice(-budget)]
+}
+
+/** 接管 / 暂停也写进日志：判断问题时能看出时间线在哪断过 */
+function pushAiLog(title: string, detail: string) {
+  aiLog.value = appendAiLog({
+    at: Date.now(),
+    kind: 'switch',
+    title,
+    detail,
+    latencyMs: 0,
+    retries: 0,
+  })
+}
+
+/** 最新一条在最上面：对局里更关心「刚才为什么这么走」 */
+const aiLogVisible = computed(() => {
+  const list = aiLogAll.value
+    ? aiLog.value
+    : aiLog.value.filter((item) => item.kind !== 'auto')
+  return [...list].reverse()
+})
+
+function aiLogTime(at: number) {
+  const date = new Date(at)
+  return [date.getHours(), date.getMinutes(), date.getSeconds()]
+    .map((value) => String(value).padStart(2, '0'))
+    .join(':')
+}
+
+function aiTokenText(entry: AgentTrace) {
+  if (!entry.tokens) return ''
+  const total = entry.tokens.prompt + entry.tokens.completion
+  if (!total) return ''
+  return entry.tokens.cacheHit ? `${total} tok（缓存 ${entry.tokens.cacheHit}）` : `${total} tok`
+}
+
+/* ---------------------------------------------------------------- */
+/* 决策日志导出                                                        */
+/* ---------------------------------------------------------------- */
+
+function pad2(value: number) {
+  return String(value).padStart(2, '0')
+}
+
+function clockText(at: number) {
+  const date = new Date(at)
+  return `${pad2(date.getHours())}:${pad2(date.getMinutes())}:${pad2(date.getSeconds())}`
+}
+
+function stampText(at: number) {
+  const date = new Date(at)
+  return `${date.getFullYear()}${pad2(date.getMonth() + 1)}${pad2(date.getDate())}-${pad2(date.getHours())}${pad2(date.getMinutes())}`
+}
+
+/** 一条 trace 的 Markdown：元信息 + 结果 + 理由 + 完整请求 / 返回 */
+function renderTraceEntry(entry: AgentTrace, index: number): string {
+  const lines = [`### ${index + 1}. ${clockText(entry.at)} · ${AI_LOG_KINDS[entry.kind]}｜${entry.title}`]
+  const meta: string[] = []
+  if (entry.candidateCount) meta.push(`${entry.candidateCount} 个候选`)
+  if (entry.latencyMs) meta.push(`${entry.latencyMs}ms`)
+  if (entry.retries) meta.push(`重试 ${entry.retries}`)
+  if (entry.tokens) {
+    const total = entry.tokens.prompt + entry.tokens.completion
+    if (entry.tokens.calls || total) {
+      meta.push(
+        `${entry.tokens.calls} 次调用｜${total} tok（prompt ${entry.tokens.prompt}、completion ${entry.tokens.completion}、缓存命中 ${entry.tokens.cacheHit}）`,
+      )
+    }
+  }
+  if (meta.length) lines.push(`- ${meta.join('｜')}`)
+  if (entry.detail) lines.push('', '**结果**', '```text', entry.detail, '```')
+  if (entry.reason) lines.push('', `**模型理由**：${entry.reason}`)
+  if (entry.request) {
+    lines.push('', '<details><summary>发给模型的完整内容</summary>', '', '````text', entry.request, '````', '', '</details>')
+  }
+  if (entry.raw) {
+    lines.push('', '<details><summary>模型原始返回</summary>', '', '````text', entry.raw, '````', '', '</details>')
+  }
+  return lines.join('\n')
+}
+
+/**
+ * 导出决策日志。
+ *
+ * 只导出日志本身不够排查「为什么没照录像打」：模型看到了什么取决于 skill 是否加载、
+ * 录像有没有解析、规划有没有触发，这些都不在单条 trace 里。所以把配置、skill 状态、
+ * 绑定的录像、当前盘面和累计用量一起打包，拿到文件就能复盘整条链路。
+ * 密钥不进文件。
+ */
+function buildAiLogReport(): string {
+  const deck = deckStore.current
+  const view = snapshot.value
+  const config = aiConfig.value
+  const skill = skillCache?.source ?? null
+  const stats = aiStats.value ?? agent.value?.getStats() ?? null
+  const plans = aiLog.value.filter((item) => item.kind === 'plan' || item.kind === 'replan').length
+  const count = (list: { count: number }[]) => list.reduce((sum, entry) => sum + (Number(entry.count) || 0), 0)
+
+  const lines: string[] = []
+  lines.push(`# AI 决策日志 · ${deck?.name || '未命名卡组'}`, '')
+  lines.push(`- 导出时间：${new Date().toLocaleString('zh-CN')}`)
+  lines.push(`- 卡组：${deck?.name || '未命名卡组'}（主 ${deck ? count(deck.main) : 0} / 额外 ${deck ? count(deck.extra) : 0} / 副 ${deck ? count(deck.side) : 0}）`)
+  lines.push(`- 日志条数：${aiLog.value.length}（其中规划 ${plans} 次）`)
+
+  lines.push('', '## 模型配置', '')
+  lines.push(`- 端点：${config.baseUrl}｜模型：${config.model}｜温度：${config.temperature}｜maxTokens：${config.maxTokens}`)
+  lines.push(
+    `- json 模式：${config.jsonMode ? '开' : '关'}｜开局规划：${config.planOnStart ? '开' : '关'}｜思考模式：${config.thinking ? '开' : '关'}（${config.reasoningEffort}）`,
+  )
+  lines.push(`- 工具轮数：${config.toolRounds}｜skill 预算：${config.skillBudget}｜超时：${config.timeoutMs}ms`)
+  lines.push('- 密钥：已省略')
+  lines.push(`- 当前状态：${aiStatus.value}${aiError.value ? `｜错误：${aiError.value}` : ''}`)
+
+  lines.push('', '## skill 状态', '')
+  if (skill) {
+    lines.push(`- 已加载：分片 ${skill.sections.length} 份｜router ${skill.router.length} 字｜录像路线 ${skill.replays.length} 份`)
+    lines.push('', '**卡组角色摘要（会被塞进每次决策的 system）**', '', '```text', skill.brief, '```')
+  } else {
+    lines.push('- **没有读到 skill**：模型只能凭常识打，录像路线完全不会生效。检查卡组是否绑定了录像、skill 是否生成。')
+  }
+  lines.push('', `**绑定的录像**（${skillBindings.value.length} 份）`, '')
+  if (!skillBindings.value.length) {
+    lines.push('- 没有绑定录像：skill 里不会有任何路线。')
+  } else {
+    for (const binding of skillBindings.value) {
+      const analysis = binding.analysis
+      const status = analysis
+        ? analysis.ok
+          ? `已解析（${analysis.turns} 回合${analysis.incomplete ? '，未终局' : ''}，步骤 ${analysis.steps.length}、决策 ${analysis.decisions.length}）`
+          : `解析失败：${analysis.error}`
+        : binding.error
+          ? `解析失败：${binding.error}`
+          : '未解析'
+      lines.push(`- ${binding.name}：${status}`)
+    }
+  }
+
+  if (view) {
+    lines.push('', '## 当前盘面', '', '```text', renderBoard(view.state), '```')
+    if (view.hint) lines.push('', `- 内核提示：${view.hint}`)
+    if (view.missingScripts.length) lines.push(`- 缺脚本的卡：${view.missingScripts.join('、')}`)
+  }
+
+  if (stats) {
+    lines.push('', '## 累计用量', '')
+    lines.push(
+      `- 调用 ${stats.calls} 次｜重试 ${stats.retries}｜降级 ${stats.fallbacks}｜失败 ${stats.failures}`,
+    )
+    lines.push(
+      `- prompt ${stats.promptTokens} tok｜completion ${stats.completionTokens} tok｜缓存命中 ${stats.cacheHitTokens}｜未命中 ${stats.cacheMissTokens}`,
+    )
+  }
+
+  const plan = aiPlan.value
+  if (plan) {
+    lines.push('', '## 当前路线', '')
+    lines.push(`- 路线：${plan.route}`)
+    if (plan.goal) lines.push(`- 目标：${plan.goal}`)
+    if (plan.steps.length) lines.push('', '**执行顺序**', '', ...plan.steps.map((step, index) => `${index + 1}. ${step}`))
+    if (plan.avoid.length) lines.push('', `- 避免：${plan.avoid.join('；')}`)
+  }
+
+  lines.push('', '## 日志（按时间正序）', '')
+  aiLog.value.forEach((entry, index) => lines.push(renderTraceEntry(entry, index)))
+  return lines.join('\n')
+}
+
+function exportAiLog() {
+  if (!aiLog.value.length) return
+  const name = (deckStore.current?.name || 'deck').replace(/[\\/:*?"<>|]/g, '_')
+  downloadText(`ai-log-${name}-${stampText(Date.now())}.md`, buildAiLogReport())
+  showToast(`已导出 AI 决策日志（${aiLog.value.length} 条）`)
+}
+
+function saveAiSettings(next: AiConfig) {
+  aiConfig.value = next
+  Object.assign(liveAiConfig, next)
+  saveAiConfig(next)
+  aiSettingsOpen.value = false
+}
+
+/** skill 包按卡表缓存：生成一次要跑手坑模拟，不能每次提问重算 */
+let skillCache: { key: string; source: SkillSource | null } | null = null
+
+/**
+ * 当前卡组绑定的录像。
+ *
+ * 工作坊废弃后 combo 就靠录像录入，所以 AI 代打必须带上这些 bindings——
+ * 否则 skill 里只有启动点表和 router，一条路线都没有，模型只能凭常识打。
+ */
+const skillBindings = ref<SkillBindingInput[]>([])
+
+async function loadSkillBindings() {
+  const deck = deckStore.current
+  if (!deck) {
+    skillBindings.value = []
+    return
+  }
+  const metas = await listReplayBindings(deck.id)
+  skillBindings.value = metas.map((meta) => ({
+    id: meta.id,
+    name: meta.name,
+    createdAt: meta.createdAt,
+    error: meta.error,
+    analysis: meta.analysis ?? null,
+  }))
+  // 录像变了，之前生成的 skill 包不再可信
+  skillCache = null
+}
+
+function skillInput(): SkillInput | null {
+  const deck = deckStore.current
+  if (!deck) return null
+  return {
+    deckName: deck.name || '未命名卡组',
+    main: deck.main,
+    extra: deck.extra,
+    side: deck.side,
+    nameOf,
+    cardOf: (code) => cardStore.getCard(code),
+    plan: deck.plan,
+    starterGroups: deck.starters,
+    handtraps: handtrapStore.defs,
+    bindings: skillBindings.value,
+  }
+}
+
+/**
+ * 取 skill 包。失败与「加载成功但内容为空」都写进日志——
+ * 之前这里是 console.warn，AI 打错时完全看不出是因为根本没读到路线。
+ */
+function getSkillSource(): SkillSource | null {
+  const deck = deckStore.current
+  if (!deck) {
+    pushAiLog('skill 不可用', '当前没有选中卡组')
+    return null
+  }
+  const key = [
+    deck.name,
+    deck.main.map((entry) => `${entry.id}x${entry.count}`).join(','),
+    deck.extra.map((entry) => `${entry.id}x${entry.count}`).join(','),
+    // 录像就是路线来源，换了一批录像必须重新生成
+    skillBindings.value.map((item) => item.id).join(','),
+  ].join('|')
+  if (skillCache?.key === key) return skillCache.source
+
+  let source: SkillSource | null = null
+  try {
+    const payload = skillInput()
+    if (payload) source = buildSkillSource(buildSkillBundle(payload))
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    pushAiLog('skill 生成失败', `${message}（本次只能凭模型常识规划）`)
+    skillCache = { key, source: null }
+    return null
+  }
+
+  const replayFiles = source ? source.sections.filter((item) => item.id.startsWith('20-replay')).length : 0
+  const usable = skillBindings.value.filter((item) => item.analysis?.ok).length
+  pushAiLog(
+    'skill 已加载',
+    source
+      ? `录像 ${usable}/${skillBindings.value.length} 份可解析；分片 ${source.sections.length} 个（录像路线 ${replayFiles}、router ${source.router.length} 字）`
+      : `没有可用的 skill（录像 ${skillBindings.value.length} 份可解析 ${usable} 份）`,
+  )
+  skillCache = { key, source }
+  return source
+}
+
+function createAgent(current: DuelSession): AgentRunner {
+  return new AgentRunner({
+    config: liveAiConfig,
+    nameOf,
+    describe: describeOption,
+    summary: (code) => cardStore.getCard(code)?.desc ?? '',
+    getSkill: getSkillSource,
+    getSignals: () => current.signals,
+    deck: () => {
+      const deck = deckStore.current
+      return {
+        name: deck?.name || '未命名卡组',
+        mainNames: deck ? deck.main.map((entry) => entry.name).slice(0, 80) : [],
+        extraNames: deck ? deck.extra.map((entry) => entry.name).slice(0, 20) : [],
+      }
+    },
+    onStatus: (status, note) => {
+      aiStatus.value = status
+      if (note) aiError.value = note
+    },
+    onReason: (text) => {
+      aiReason.value = text
+    },
+    onTrace: (entry) => {
+      aiStats.value = agent.value?.getStats() ?? null
+      aiPlan.value = agent.value?.getPlan() ?? null
+      aiLog.value = appendAiLog(entry)
+      if (aiError.value && aiStatus.value !== 'error') aiError.value = ''
+    },
+  })
+}
+
+/** 把当前待答问题交给 AI；开启开关时如果正停在某一步，立刻接管 */
+function driveAgent() {
+  const runner = agent.value
+  const current = session.value
+  const pending = question.value
+  if (!runner || !current || !pending || pending.player !== 0) return
+  void runner.handle(pending, current.snapshot().state, (response) => current.answer(response))
+}
+
+/** 「重新开始」会主动关掉 AI：这次关闭不该写成「已暂停接管」，新局日志要是干净的 */
+let aiOffByRestart = false
+
+/** 开新局前停掉代打：必须等玩家重新点「AI 代打」才开始推理 */
+function stopAiSilently() {
+  if (!aiEnabled.value) return
+  aiOffByRestart = true
+  aiEnabled.value = false
+}
+
+watch(aiEnabled, async (on) => {
+  aiReason.value = ''
+  aiError.value = ''
+  const runner = agent.value
+  if (!on) {
+    const silent = aiOffByRestart
+    aiOffByRestart = false
+    aiStatus.value = 'idle'
+    // 重新开始主动关闭：旧 runner 已由 startDuel 停掉，别再误停刚建好的新 runner
+    if (silent) return
+    runner?.stop()
+    // 日志刻意不清空：手动接管后往往正是要回溯刚才的决策
+    if (session.value) pushAiLog('已暂停接管', '接下来的提问需要手动操作；重新开启会接着用同一份日志')
+    return
+  }
+  if (!runner || !session.value) {
+    showToast('先开始一局，再开启 AI 代打')
+    return
+  }
+  if (!aiReady.value) {
+    aiSettingsOpen.value = true
+    showToast('先填写 API Key')
+    return
+  }
+  runner.reset()
+  aiStatus.value = 'thinking'
+  // 录像就是路线来源：先读出来，第一次规划才能看到录过的打法
+  await loadSkillBindings()
+  if (!aiEnabled.value) return
+  pushAiLog(
+    '重新接管',
+    runner.hasPlan()
+      ? '沿用原路线继续；只有检测到偏离（对手打断 / 路线资源耗尽 / 跨回合）才重新规划'
+      : '没有可沿用的路线，下一次操作会重新规划',
+  )
+  driveAgent()
+})
+
 /** 选项的文字版：面板按这个渲染，不再是「选项 1 / 选项 2」 */
 const optionLabels = computed(() =>
   question.value?.kind === 'option' ? question.value.message.options.map((id) => describeOption(id)) : [],
@@ -173,6 +596,8 @@ function answer(response: OcgResponse) {
   menu.value = null
   const current = session.value
   if (!current) return
+  // AI 正在算这一步：手动作答会和它抢同一个 answerResolve，直接忽略
+  if (aiEnabled.value && aiBusy.value) return
   // 面板是上一帧的残留时内核并没有在等回答：丢掉这次点击，并强制刷一次快照，
   // 免得界面停在一个点不动的旧面板上
   if (!current.answer(response)) version.value += 1
@@ -414,6 +839,9 @@ async function startDuel(restore?: DuelCheckpoint) {
   starting.value = true
   errorText.value = ''
   endConfirm.value = false
+  // 重新开始一律回到手动操作：否则 aiEnabled 还是 true，新局第一帧 AI 就自己推理了
+  stopAiSilently()
+  agent.value?.stop()
   session.value?.stop()
   session.value = null
   lastLp = null
@@ -447,9 +875,24 @@ async function startDuel(restore?: DuelCheckpoint) {
         version.value += 1
       },
       onLog: (text) => console.info('[duel]', text),
+      onQuestion: (pending) => {
+        // 只代打我方；对手固定走沙包策略
+        if (!aiEnabled.value || pending.player !== 0) return
+        const runner = agent.value
+        if (!runner) return
+        void runner.handle(pending, next.snapshot().state, (response) => next.answer(response))
+      },
     },
   )
   session.value = next
+  agent.value = createAgent(next)
+  // 预读录像：开启 AI 时就能拿到路线（不阻塞开局）
+  void loadSkillBindings()
+  aiStats.value = null
+  aiReason.value = ''
+  aiError.value = ''
+  aiLog.value = []
+  aiPlan.value = null
   // 默认进网站全屏（场地铺满视口，HUD 提供暂存 / 屏幕全屏 / 结束）
   immersive.value = true
   try {
@@ -529,9 +972,11 @@ function finishDuel(mode: 'none' | 'export' | 'bind') {
   if (mode === 'bind') void bindReplayToDeck()
   endConfirm.value = false
   void exitWebFullscreen()
+  agent.value?.stop()
   session.value?.stop()
   session.value = null
   immersive.value = false
+  aiStatus.value = 'idle'
   version.value += 1
 }
 
@@ -1010,6 +1455,7 @@ onBeforeUnmount(() => {
   zoneObserver?.disconnect()
   zoneObserver = null
   void exitWebFullscreen()
+  agent.value?.stop()
   session.value?.stop()
   if (attackTimer) clearTimeout(attackTimer)
   if (lpTimer) clearTimeout(lpTimer)
@@ -1032,6 +1478,20 @@ onBeforeUnmount(() => {
       </span>
       <span v-if="replaying" class="hud-replay">正在自动操作到暂存点…</span>
       <span class="hud-spacer" />
+      <button
+        v-if="session"
+        class="btn sm"
+        :class="{ primary: aiEnabled }"
+        :disabled="starting || replaying"
+        :title="aiEnabled ? 'AI 正在替你操作，随时可以关掉' : '让 AI 从起手规划路线并接管我方操作'"
+        @click="aiEnabled = !aiEnabled"
+      >
+        {{ aiEnabled ? 'AI 代打中' : 'AI 代打' }}
+      </button>
+      <button v-if="aiLog.length" class="btn sm ghost" @click="aiLogOpen = true">
+        日志 ({{ aiLog.length }})
+      </button>
+      <button class="btn sm ghost" @click="aiSettingsOpen = true">AI 设置</button>
       <button class="btn sm" :disabled="starting" @click="launchDuel">重新开始</button>
       <button class="btn sm" :disabled="!session || starting || replaying" @click="saveCurrentCheckpoint">暂存</button>
       <button v-if="fullscreenSupported" class="btn sm" @click="toggleWebFullscreen">
@@ -1067,6 +1527,16 @@ onBeforeUnmount(() => {
           <button class="btn" :disabled="starting" @click="checkpointOpen = true">
             历史暂存 {{ checkpoints.length ? `(${checkpoints.length})` : '' }}
           </button>
+          <button
+            v-if="session"
+            class="btn"
+            :class="{ primary: aiEnabled }"
+            :disabled="starting || replaying"
+            @click="aiEnabled = !aiEnabled"
+          >
+            {{ aiEnabled ? 'AI 代打中' : 'AI 代打' }}
+          </button>
+          <button class="btn" @click="aiSettingsOpen = true">AI 设置</button>
           <button class="btn primary" :disabled="starting" @click="launchDuel">
             {{ session ? '重新开始' : '开始对局' }}
           </button>
@@ -1080,6 +1550,35 @@ onBeforeUnmount(() => {
           </button>
         </div>
       </div>
+    </div>
+
+    <div
+      v-if="aiEnabled || aiLog.length"
+      class="duel-ai"
+      :class="{ paused: !aiEnabled }"
+    >
+      <span class="ai-tag">AI</span>
+      <span class="ai-state">
+        {{
+          !aiEnabled
+            ? '已暂停，手动操作中'
+            : aiStatus === 'planning'
+              ? '正在规划路线…'
+              : aiStatus === 'thinking'
+                ? '正在决策…'
+                : '待命'
+        }}
+      </span>
+      <span v-if="aiReason" class="ai-reason">{{ aiReason }}</span>
+      <span v-if="aiError" class="ai-err">{{ aiError }}</span>
+      <span class="ai-spacer" />
+      <button class="btn sm ghost" @click="aiLogOpen = true">
+        日志{{ aiLog.length ? ` (${aiLog.length})` : '' }}
+      </button>
+      <button class="btn sm ghost" @click="aiSettingsOpen = true">设置</button>
+      <button class="btn sm" :class="{ primary: !aiEnabled }" @click="aiEnabled = !aiEnabled">
+        {{ aiEnabled ? '接管回来' : '继续接管' }}
+      </button>
     </div>
 
     <div v-if="errorText" class="duel-error">{{ errorText }}</div>
@@ -1561,6 +2060,90 @@ onBeforeUnmount(() => {
         <span class="menu-zone">{{ zoneLabel(item.location, item.sequence) }}</span>
       </button>
     </div>
+
+    <!-- AI 决策日志：规划 / 每步选择 / 打断 / 降级 -->
+    <div v-if="aiLogOpen" class="ai-log-mask" @click.self="aiLogOpen = false">
+      <section class="ai-log-panel">
+        <header class="ai-log-head">
+          <span class="panel-title">AI 决策日志</span>
+          <span class="ai-log-count">{{ aiLog.length }} 条</span>
+          <span class="ai-spacer" />
+          <label class="ai-log-filter">
+            <input v-model="aiLogAll" type="checkbox" />
+            显示自动步骤
+          </label>
+          <button
+            class="btn sm"
+            :disabled="!aiLog.length"
+            title="导出完整日志：模型配置、skill 状态、录像解析情况、盘面、每条请求与返回"
+            @click="exportAiLog"
+          >
+            导出日志
+          </button>
+          <button class="btn sm ghost" @click="aiLogOpen = false">关闭</button>
+        </header>
+
+        <!-- 路线与日志共用一个滚动区：plan 长了也不会把日志压没 -->
+        <div class="ai-log-body">
+          <div v-if="aiPlan" class="ai-log-plan">
+            <div class="plan-route">{{ aiPlan.route }}</div>
+            <div v-if="aiPlan.goal" class="plan-line">目标：{{ aiPlan.goal }}</div>
+            <ol v-if="aiPlan.steps.length" class="plan-steps">
+              <li v-for="(step, index) in aiPlan.steps" :key="index">{{ step }}</li>
+            </ol>
+            <div v-if="aiPlan.avoid.length" class="plan-line">避免：{{ aiPlan.avoid.join('；') }}</div>
+            <div v-if="aiPlan.handtraps.length" class="plan-line">
+              手坑应对：{{ aiPlan.handtraps.join('；') }}
+            </div>
+          </div>
+
+          <ol v-if="aiLogVisible.length" class="ai-log-list">
+            <li
+              v-for="(item, index) in aiLogVisible"
+              :key="`${item.at}-${index}`"
+              :class="`k-${item.kind}`"
+            >
+              <div class="log-head">
+                <span class="log-time">{{ aiLogTime(item.at) }}</span>
+                <span class="log-kind">{{ AI_LOG_KINDS[item.kind] }}</span>
+                <span class="log-title">{{ item.title }}</span>
+                <span v-if="item.candidateCount" class="log-cands">{{ item.candidateCount }} 选</span>
+                <span class="log-meta">
+                  <template v-if="item.latencyMs">{{ item.latencyMs }}ms</template>
+                  <template v-if="aiTokenText(item)"> · {{ aiTokenText(item) }}</template>
+                  <template v-if="item.retries"> · 重试 {{ item.retries }}</template>
+                </span>
+              </div>
+              <div class="log-detail">{{ item.detail }}</div>
+              <div v-if="item.reason" class="log-reason">理由：{{ item.reason }}</div>
+              <details v-if="item.request || item.raw" class="log-io">
+                <summary>查看发给模型的内容与原始返回</summary>
+                <div v-if="item.request" class="log-io-block">
+                  <div class="log-io-label">发给模型</div>
+                  <pre class="log-io-pre">{{ item.request }}</pre>
+                </div>
+                <div v-if="item.raw" class="log-io-block">
+                  <div class="log-io-label">原始返回</div>
+                  <pre class="log-io-pre">{{ item.raw }}</pre>
+                </div>
+              </details>
+            </li>
+          </ol>
+
+          <div v-else class="ai-log-empty">
+            还没有决策记录。开启 AI 代打后，路线规划、每一步选择、被打断与降级都会记在这里。
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <ModelSettings
+      :open="aiSettingsOpen"
+      :config="aiConfig"
+      :stats="aiStats"
+      @close="aiSettingsOpen = false"
+      @save="saveAiSettings"
+    />
   </section>
 </template>
 
@@ -1842,6 +2425,284 @@ onBeforeUnmount(() => {
   background: rgba(255, 106, 105, 0.1);
   color: var(--red);
   font-size: 12px;
+}
+
+/* AI 代打状态条：只在开启时出现，保持和错误条同一行的视觉层级 */
+.duel-ai {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  padding: 7px 12px;
+  border: 1px solid rgba(113, 183, 255, 0.4);
+  border-radius: 10px;
+  background: rgba(113, 183, 255, 0.08);
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.ai-tag {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--gold-deep);
+  color: #fff;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+}
+
+.ai-state {
+  color: var(--gold);
+}
+
+/* 暂停状态：条形还在（日志入口不能丢），但视觉上退到背景 */
+.duel-ai.paused {
+  border-color: var(--line);
+  background: transparent;
+}
+
+.duel-ai.paused .ai-tag {
+  background: var(--line);
+  color: var(--text-mute);
+}
+
+.duel-ai.paused .ai-state {
+  color: var(--text-mute);
+}
+
+.ai-reason {
+  max-width: 52ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-mute);
+}
+
+.ai-err {
+  color: var(--amber);
+}
+
+.ai-spacer {
+  flex: 1;
+}
+
+/* AI 决策日志：右侧抽屉，只读 */
+.ai-log-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 58;
+  display: flex;
+  justify-content: flex-end;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.ai-log-panel {
+  display: flex;
+  flex-direction: column;
+  width: min(480px, 100vw);
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  border-left: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.ai-log-head {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+/*
+ * 滚动容器：路线 + 日志都放在这里。
+ * 之前是 list 自己 flex:1 + overflow，而 flex 子项的 min-height 默认取内容高度，
+ * 路线一长就把 list 压到几乎 0 高——内容看不到也滚不动。
+ */
+.ai-log-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(240, 243, 246, 0.18) transparent;
+}
+
+.ai-log-count {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-mute);
+}
+
+.ai-log-filter {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--text-mute);
+  cursor: pointer;
+}
+
+.ai-log-plan {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel-2);
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.plan-route {
+  color: var(--gold);
+  font-weight: 600;
+}
+
+.plan-line {
+  margin-top: 2px;
+  color: var(--text-mute);
+}
+
+.plan-steps {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  color: var(--text-dim);
+}
+
+.ai-log-list {
+  padding: 10px 14px 20px;
+  margin: 0;
+  list-style: none;
+}
+
+.ai-log-list li {
+  padding: 8px 10px;
+  margin-bottom: 6px;
+  border-left: 2px solid var(--line);
+  border-radius: 0 4px 4px 0;
+  background: var(--panel-2);
+  font-size: 12px;
+}
+
+.ai-log-list li.k-plan,
+.ai-log-list li.k-replan {
+  border-left-color: var(--gold);
+}
+
+.ai-log-list li.k-decide {
+  border-left-color: var(--green);
+}
+
+.ai-log-list li.k-fallback {
+  border-left-color: var(--amber);
+}
+
+.ai-log-list li.k-interrupt {
+  border-left-color: var(--violet);
+}
+
+.ai-log-list li.k-switch {
+  border-left-color: var(--cyan);
+  background: rgba(57, 197, 207, 0.07);
+}
+
+.ai-log-list li.k-auto {
+  border-left-color: var(--line);
+  opacity: 0.75;
+}
+
+.log-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: baseline;
+}
+
+.log-time {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-mute);
+}
+
+.log-kind {
+  padding: 0 5px;
+  border-radius: 3px;
+  background: rgba(113, 183, 255, 0.14);
+  color: var(--gold);
+  font-size: 10px;
+}
+
+.log-title {
+  color: var(--text-dim);
+}
+
+.log-cands {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-mute);
+}
+
+.log-meta {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-mute);
+}
+
+.log-detail {
+  margin-top: 4px;
+  color: var(--text);
+  word-break: break-word;
+}
+
+.log-reason {
+  margin-top: 3px;
+  font-size: 11px;
+  color: var(--text-mute);
+}
+
+.log-io {
+  margin-top: 6px;
+}
+
+.log-io summary {
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--cyan);
+}
+
+.log-io-block {
+  margin-top: 6px;
+}
+
+.log-io-label {
+  margin-bottom: 3px;
+  font-size: 10px;
+  color: var(--text-mute);
+}
+
+.log-io-pre {
+  max-height: 280px;
+  padding: 8px 10px;
+  margin: 0;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--bg-2);
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 10px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.ai-log-empty {
+  padding: 24px 16px;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--text-mute);
 }
 
 .duel-warn {

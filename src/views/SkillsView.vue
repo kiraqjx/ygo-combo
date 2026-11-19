@@ -2,9 +2,7 @@
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useDeckStore } from '@/stores/deck'
 import { useCardStore } from '@/stores/cards'
-import { useComboStore } from '@/stores/combos'
 import { useHandtrapStore } from '@/stores/handtraps'
-import type { ComboLine } from '@/types'
 import { analyzeReplay } from '@/lib/duel/replay'
 import { HANDTRAP_ANALYSIS_VERSION, hitNameText } from '@/lib/duel/replayHandtraps'
 import {
@@ -45,42 +43,12 @@ const nameOf = (code: number) => cardStore.getCard(code)?.name || `#${code}`
 const deck = computed(() => deckStore.current)
 const deckName = computed(() => deck.value?.name || '未命名卡组')
 
-const comboStore = useComboStore()
 const handtrapStore = useHandtrapStore()
 
-/**
- * 与当前卡组关联的展开：展开没有 deckId，只能按卡表匹配。
- * 卡名集合重合度 ≥60%，或展开的卡组名与当前卡组同名，就算同一套构筑。
- * 最多取 5 条：路线推导要对每条链跑一遍手坑模拟，太多会让生成变慢。
- */
-const relatedLines = computed<{ comboName: string; line: ComboLine }[]>(() => {
-  const current = deck.value
-  if (!current) return []
-  const mainNames = new Set(current.main.map((entry) => entry.name.trim()).filter(Boolean))
-  if (!mainNames.size) return []
-  const deckLabel = (current.name || '').trim()
-  const scored: { comboName: string; line: ComboLine; score: number }[] = []
-
-  for (const combo of comboStore.combos) {
-    for (const line of combo.lines) {
-      const lineNames = new Set(line.deck.map((entry) => entry.name.trim()).filter(Boolean))
-      if (!lineNames.size) continue
-      const shared = [...lineNames].filter((name) => mainNames.has(name)).length
-      const ratio = shared / Math.max(lineNames.size, mainNames.size)
-      const sameName =
-        Boolean(deckLabel) && (line.deckName.trim() === deckLabel || line.name.trim() === deckLabel)
-      const score = sameName ? 1 : ratio
-      if (score >= 0.6) scored.push({ comboName: combo.name, line, score })
-    }
-  }
-
-  return scored
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 5)
-    .map(({ comboName, line }) => ({ comboName, line }))
-})
-
 const totalSize = computed(() => bindings.value.reduce((sum, item) => sum + item.size, 0))
+
+/** 可解析的录像：每份都是一条可用路线，会挂到起手命中的启动点上 */
+const usableReplays = computed(() => bindings.value.filter((item) => item.analysis?.ok).length)
 
 interface SkillFileEntry {
   path: string
@@ -177,8 +145,6 @@ watch(() => deckStore.currentDeckId, refresh)
 onMounted(async () => {
   // 卡名解析依赖卡库；没就绪时先拉一次，日志里的卡名才不会全是 #编号
   if (cardStore.status !== 'ready') void cardStore.init()
-  // 展开存在 localStorage，按卡表匹配前要先载入
-  comboStore.load()
   await refresh()
 })
 
@@ -218,6 +184,31 @@ async function remove(item: ReplayBindingMeta) {
   await removeReplayBinding(item.id)
   await refresh()
   if (!bindings.value.length) skillText.value = ''
+}
+
+/** 文件名里的非法字符换成下划线，顺便保证 .yrp 后缀 */
+function replayFileName(name: string): string {
+  const clean = name
+    .replace(/\.yrp$/i, '')
+    .replace(/[\\/:*?"<>|]/g, '_')
+    .trim()
+  return `${clean || 'replay'}.yrp`
+}
+
+/**
+ * 导出单份录像的 .yrp 原始字节。
+ *
+ * 绑定时存的就是文件原样（`bindReplay` 只做一次 `slice()`），所以导出的文件
+ * 和当初导入的完全一致，可以直接丢回 ygopro / 别的工具里复盘。
+ */
+async function exportReplay(item: ReplayBindingMeta) {
+  const record = await loadReplayBinding(item.id)
+  if (!record) {
+    toast('录像数据已丢失，无法导出', true)
+    return
+  }
+  downloadBytes(replayFileName(item.name), record.bytes, 'application/octet-stream')
+  toast(`已导出 ${replayFileName(item.name)}（${sizeText(record.size)}）`)
 }
 
 async function cleanOrphans() {
@@ -329,7 +320,6 @@ function skillInput(inputs: SkillBindingInput[]): SkillInput | null {
     cardOf: (code) => cardStore.getCard(code),
     plan: current.plan,
     starterGroups: current.starters,
-    lines: relatedLines.value,
     handtraps: handtrapStore.defs,
     bindings: inputs,
   }
@@ -352,8 +342,8 @@ function downloadJson() {
 }
 
 /**
- * 分片包：路由层 + 每个启动点一条展开 + 卡效切片。
- * AI 先读 00-router.md 判断手牌，再只加载需要的那条 10-line-*.md。
+ * 分片包：路由层 + 每个启动点对应的录像路线 + 卡效切片。
+ * AI 先读 00-router.md 判断手牌，再只加载需要的那条 20-replay-*.md。
  */
 function downloadBundle() {
   const current = bundle.value
@@ -375,8 +365,8 @@ function downloadBundle() {
       <div>
         <h1 class="page-title">AI Skill</h1>
         <p class="inline-note">
-          把卡组、启动率配置、关联展开（按卡表自动匹配）与绑定的 .yrp 录像整理成一份 AI 能读懂的 skill：
-          完整卡效、起手概率、决策路线、资源曲线、终场与阻抗时机都会自动推导。
+          把卡组、启动率配置与绑定的 .yrp 录像整理成一份 AI 能读懂的 skill：
+          录像就是展开路线，按起手自动挂到对应启动点；完整卡效、起手概率、终场与阻抗时机都会自动推导。
         </p>
       </div>
       <div class="skills-actions">
@@ -398,8 +388,11 @@ function downloadBundle() {
     <div class="skills-meta">
       <span class="chip">卡组：{{ deckName }}</span>
       <span class="chip-dim">录像 {{ bindings.length }} 份 · {{ sizeText(totalSize) }}</span>
-      <span class="chip-dim" :title="relatedLines.length ? '按卡表重合度自动匹配的展开' : '工作坊里的展开卡表与此卡组重合度 ≥60% 才会关联'">
-        关联展开 {{ relatedLines.length }} 条
+      <span
+        class="chip-dim"
+        :title="usableReplays ? '录像按起手自动关联到启动点，就是各启动点的路线' : '没有可解析的录像：启动点会显示「未录入」'"
+      >
+        录像路线 {{ usableReplays }} 份
       </span>
       <span v-if="cardStore.status !== 'ready'" class="chip amber">卡库未就绪，卡名可能显示为 #编号</span>
       <span v-if="orphanCount" class="chip-dim">
@@ -456,7 +449,12 @@ function downloadBundle() {
                 </ul>
               </details>
             </div>
-            <button class="btn xs danger" :disabled="generating" @click="remove(item)">移除</button>
+            <div class="replay-actions">
+              <button class="btn xs ghost" :title="`导出 ${replayFileName(item.name)}`" @click="exportReplay(item)">
+                导出
+              </button>
+              <button class="btn xs danger" :disabled="generating" @click="remove(item)">移除</button>
+            </div>
           </div>
         </div>
       </aside>
@@ -632,6 +630,12 @@ function downloadBundle() {
 .replay-main {
   min-width: 0;
   flex: 1;
+}
+
+.replay-actions {
+  display: flex;
+  flex: none;
+  gap: 6px;
 }
 
 .replay-name {

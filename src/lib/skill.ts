@@ -1,17 +1,18 @@
-import type { CardData, ComboLine, DeckEntry } from '@/types'
+import type { CardData, DeckEntry } from '@/types'
 import type { ReplayAnalysis } from '@/lib/duel/replay'
 import type { HandtrapDef } from '@/lib/handtraps'
 import type { RatePlan } from '@/lib/rates'
 import { HANDTRAP_FOOTNOTE, hitConsequenceText, hitNameText, hitPositionText } from '@/lib/duel/replayHandtraps'
-import { buildRouteReport, type EndBoard, type RouteReport } from '@/lib/skillRoutes'
 import { buildSampleReport, type SampleReport } from '@/lib/skillSamples'
 
 /**
- * 把「卡组 + 启动率配置 + 关联展开 + 绑定的录像」写成一份 AI 能直接读懂的 skill 文档。
+ * 把「卡组 + 启动率配置 + 绑定的录像」写成一份 AI 能直接读懂的 skill 文档。
+ *
+ * 路线唯一来源是录像回放（combo 工坊已废弃）：起手、每步操作、手坑命中点与终局盘面
+ * 都从信号流还原，不再支持手工编排的展开链。
  *
  * 自动层（不需要人工标注）：
- *   卡片资料（完整卡效）→ 起手样本与概率 → 展开路线 / 决策树 / 资源曲线 →
- *   终场与妥协盘面 → 阻抗时机 → 录像流程 → 选项语义 → 覆盖度。
+ *   卡片资料（完整卡效）→ 起手样本与概率 → 录像路线 → 阻抗时机 → 选项语义 → 覆盖度。
  *
  * 标注层（本层不做）：分支原因、妥协标准、先后攻、换备、对手交互。
  */
@@ -22,11 +23,6 @@ export interface SkillBindingInput {
   createdAt: number
   error?: string
   analysis: ReplayAnalysis | null
-}
-
-export interface SkillLineInput {
-  comboName: string
-  line: ComboLine
 }
 
 export interface SkillInput {
@@ -42,8 +38,6 @@ export interface SkillInput {
   plan?: RatePlan | null
   /** 卡组页的简易启动组（plan.starters 为空时兜底） */
   starterGroups?: { id: string; cards: number[] }[]
-  /** 与卡表匹配到的展开 */
-  lines?: SkillLineInput[]
   /** 手坑定义：手坑起手与阻抗时机 */
   handtraps?: HandtrapDef[]
 }
@@ -70,28 +64,24 @@ export function buildSkillMarkdown(input: SkillInput): string {
     handtraps: input.handtraps,
     nameOf,
   })
-  const routes = (input.lines ?? []).map((item) => buildRouteReport(item.comboName, item.line))
-  const coverage = buildSkillCoverage(input, samples, routes)
+  const coverage = buildSkillCoverage(input, samples)
   const lines: string[] = []
 
   lines.push(`# 卡组展开 Skill：${deckName}`, '')
   lines.push(
-    `> 由「combo 推演」绑定的 ${input.bindings.length} 份录像 + ${routes.length} 条关联展开自动生成（${formatDate(Date.now())}）。`,
-    '> 卡片资料、起手概率、路线与阻抗由卡库 / 启动率配置 / 推演内核推导；',
+    `> 由「combo 推演」绑定的 ${input.bindings.length} 份录像自动生成（${formatDate(Date.now())}）。`,
+    '> 路线、每步操作与手坑命中点都来自录像回放，卡片资料与起手概率来自卡库 / 启动率配置；',
     '> 标注项（分支原因、妥协标准、先后攻、换备、对手交互）留空，等人工补齐。',
     '',
   )
 
   pushUsage(lines)
-  pushOverview(lines, input, routes, coverage)
+  pushOverview(lines, input, coverage)
   pushDeckSection(lines, '主卡组', input.main, input.nameOf)
   pushDeckSection(lines, '额外卡组', input.extra, input.nameOf)
   if (input.side.length) pushDeckSection(lines, '副卡组', input.side, input.nameOf)
   pushCards(lines, input)
   pushSamples(lines, samples, nameOf)
-  pushRoutes(lines, routes)
-  pushEndBoards(lines, routes)
-  pushHandtrapSummary(lines, routes)
   pushReplays(lines, input, usable, failed)
   pushSummary(lines, input, usable)
   pushSemantics(lines)
@@ -112,8 +102,7 @@ export function buildSkillJson(input: SkillInput): string {
     handtraps: input.handtraps,
     nameOf: input.nameOf,
   })
-  const routes = (input.lines ?? []).map((item) => buildRouteReport(item.comboName, item.line))
-  const coverage = buildSkillCoverage(input, samples, routes)
+  const coverage = buildSkillCoverage(input, samples)
   const nameOf = input.nameOf
 
   const deck = {
@@ -184,11 +173,11 @@ export function buildSkillJson(input: SkillInput): string {
 
   return JSON.stringify(
     {
-      schemaVersion: 2,
+      // 3：路线不再来自工作坊展开，全部由 replays 推导
+      schemaVersion: 3,
       deck,
       cards,
       samples: sampleJson,
-      routes,
       coverage,
       replays,
     },
@@ -203,11 +192,7 @@ export function skillFileName(deckName: string, extension: 'md' | 'json'): strin
   return `${safe}-skill.${extension}`
 }
 
-export function buildSkillCoverage(
-  input: SkillInput,
-  samples: SampleReport,
-  routes: RouteReport[],
-): CoverageItem[] {
+export function buildSkillCoverage(input: SkillInput, samples: SampleReport): CoverageItem[] {
   const items: CoverageItem[] = []
   const usable = input.bindings.filter((item) => item.analysis?.ok)
   const finished = usable.filter((item) => !item.analysis?.incomplete)
@@ -236,39 +221,43 @@ export function buildSkillCoverage(
     hint: samples.available ? undefined : '在「启动率」页配置启动条件与废件，才能推导起手样本。',
   })
 
+  // 路线只有一个来源：录像。启动点按录像起手自动关联
+  const replayHits = usable.reduce(
+    (sum, item) => sum + (item.analysis?.handtrapHits ?? []).filter((hit) => !hit.dodged).length,
+    0,
+  )
   items.push({
     id: 'routes',
     label: '展开路线',
-    state: routes.length ? 'ok' : 'missing',
-    detail: routes.length ? `${routes.length} 条` : '没有关联展开',
-    hint: routes.length ? undefined : '在「工作坊」里用这套卡表建展开链，卡表重合度高会自动关联。',
+    state: usable.length ? 'ok' : 'missing',
+    detail: usable.length ? `${usable.length} 份录像` : '没有可用路线',
+    hint: usable.length
+      ? undefined
+      : '在「combo 推演」里打完一局并「绑定到卡组」，或导入 .yrp；启动点会按录像起手自动关联。',
   })
 
-  const branchCount = routes.reduce((sum, route) => sum + route.branches.length, 0)
   items.push({
     id: 'branches',
     label: '分支与风险',
-    state: branchCount > 0 ? 'ok' : routes.length ? 'partial' : 'missing',
-    detail: branchCount ? `${branchCount} 个手坑分支` : '没有可命中的手坑',
-    hint: branchCount ? undefined : '在展开里给效果段标记可被哪些手坑阻止。',
+    state: replayHits ? 'ok' : usable.length ? 'partial' : 'missing',
+    detail: replayHits ? `录像里 ${replayHits} 个命中点` : '没有可命中的手坑',
+    hint: replayHits ? undefined : '导入一份带对手交互的录像后重新解析。',
   })
 
-  const effective = routes.reduce((sum, route) => sum + route.handtraps.filter((item) => item.effective).length, 0)
   items.push({
     id: 'handtraps',
     label: '阻抗时机',
-    state: effective > 0 ? 'ok' : 'missing',
-    detail: `${effective} 条手坑命中记录`,
-    hint: effective > 0 ? undefined : '在「工作坊 → 抗性」里确认手坑标记，或到「手坑」页补自定义手坑。',
+    state: replayHits > 0 ? 'ok' : 'missing',
+    detail: `${replayHits} 条手坑命中记录`,
+    hint: replayHits > 0 ? undefined : '导入 .yrp 后重新解析（判定规则版本变化也要重解析）。',
   })
 
-  const boards = routes.filter((route) => route.endBoard.monsters.length + route.endBoard.spells.length > 0)
   items.push({
     id: 'endBoard',
     label: '终场盘面',
-    state: boards.length ? 'ok' : 'missing',
-    detail: boards.length ? `${boards.length} 条` : '没有终场',
-    hint: boards.length ? undefined : '展开链需要至少一条有时序的路线。',
+    state: finished.length ? 'ok' : 'missing',
+    detail: finished.length ? `${finished.length} 份录像跑到终局` : '没有跑到终局的录像',
+    hint: finished.length ? undefined : '打完一局（或托管到终局）再绑定，录像的终局盘面就是终场参考。',
   })
 
   items.push({
@@ -307,18 +296,14 @@ function pushUsage(lines: string[]) {
   lines.push('- 引用卡片原文解释效果与规则处理，不靠猜。', '')
 }
 
-function pushOverview(
-  lines: string[],
-  input: SkillInput,
-  routes: RouteReport[],
-  coverage: CoverageItem[],
-) {
+function pushOverview(lines: string[], input: SkillInput, coverage: CoverageItem[]) {
   const total = (list: DeckEntry[]) => list.reduce((sum, entry) => sum + entry.count, 0)
   const ok = coverage.filter((item) => item.state === 'ok').length
+  const usable = input.bindings.filter((item) => item.analysis?.ok).length
   lines.push('## 概览', '')
   lines.push(
     `- 构筑：主 ${total(input.main)} · 额 ${total(input.extra)} · 副 ${total(input.side)}`,
-    `- 关联展开：${routes.length} 条；录像：${input.bindings.length} 份；手坑定义：${input.handtraps?.length ?? 0} 个`,
+    `- 录像路线：${usable} 份（共绑定 ${input.bindings.length} 份）；手坑定义：${input.handtraps?.length ?? 0} 个`,
     `- 自动层完整度：${ok}/${coverage.length} 项达标`,
     '',
   )
@@ -382,118 +367,6 @@ function pushSamples(lines: string[], samples: SampleReport, nameOf: (code: numb
 
   for (const note of samples.notes) lines.push(`> ${note}`)
   lines.push('')
-}
-
-function pushRoutes(lines: string[], routes: RouteReport[]) {
-  lines.push('## 主线路线（决策树）', '')
-  if (!routes.length) {
-    lines.push('_没有找到与这套卡表匹配的展开。_', '')
-    lines.push('- 在「工作坊」里按这套卡表建一条展开链，卡表重合度 ≥60% 会自动关联。', '')
-    return
-  }
-
-  for (const route of routes) {
-    lines.push(`### 展开「${route.comboName} / ${route.lineName}」`, '')
-    lines.push(`- 终场目标：${route.goal || '（未填写）'}`)
-    lines.push(`- 手牌 ${route.handSize} 张 · ${route.timings} 个时序 · 累计召唤 ${route.totalSummons} 次`)
-    for (const warning of route.warnings) lines.push(`- 注意：${warning}`)
-    lines.push('')
-
-    if (!route.steps.length) {
-      lines.push('_这条路线还没有时序。_', '')
-      continue
-    }
-
-    lines.push('资源曲线（每步结算后）：', '')
-    lines.push('| # | 操作 | 状态 | 手牌 | 前场 | 后场 | 墓地 | 除外 | 召唤 |')
-    lines.push('| --- | --- | --- | --- | --- | --- | --- | --- | --- |')
-    for (const step of route.steps) {
-      const r = step.resources
-      lines.push(
-        `| ${step.index + 1} | ${step.title} | ${statusText(step.status)} | ${r.hand} | ${r.field} | ${r.st} | ${r.gy} | ${r.banish} | ${r.summons} |`,
-      )
-    }
-    lines.push('')
-
-    for (const step of route.steps) {
-      if (!step.moves.length && !step.chains.length && !step.links.length && !step.reasons.length) continue
-      lines.push(`#### 第 ${step.index + 1} 步 · ${step.title}`, '')
-      if (step.chains.length) lines.push(`- 连锁：${step.chains.join(' / ')}`)
-      if (step.links.length) lines.push(`- 上游链路：${step.links.join('；')}`)
-      for (const move of step.moves) lines.push(`- ${move}`)
-      if (step.reasons.length) lines.push(`- 推演说明：${step.reasons.join('；')}`)
-      lines.push('')
-    }
-
-    if (route.branches.length) {
-      lines.push('#### 分支与风险', '')
-      lines.push('| 节点 | 条件 | 备选 | 风险 |')
-      lines.push('| --- | --- | --- | --- |')
-      for (const branch of route.branches) {
-        lines.push(`| 第 ${branch.step + 1} 步 | ${branch.condition} | ${branch.alternative} | ${branch.risk} |`)
-      }
-      lines.push('')
-    }
-
-    lines.push('#### 终场盘面', '')
-    lines.push(...boardLines(route.endBoard))
-    lines.push('')
-
-    lines.push('#### 阻抗时机', '')
-    lines.push('| 手坑 | 判定 | 命中位置 | 影响 |')
-    lines.push('| --- | --- | --- | --- |')
-    for (const item of route.handtraps) {
-      const sites = item.sites.length ? item.sites.map((index) => `第 ${index + 1} 步`).join('、') : '无法命中'
-      lines.push(`| ${item.name} | ${item.verdictLabel} | ${sites} | ${item.headline} |`)
-    }
-    lines.push('')
-  }
-}
-
-function pushEndBoards(lines: string[], routes: RouteReport[]) {
-  lines.push('## 终场目标与妥协标准', '')
-  if (!routes.length) {
-    lines.push('_缺少展开路线，无法推导终场。_', '')
-    return
-  }
-  for (const route of routes) {
-    lines.push(`### ${route.comboName} / ${route.lineName}`, '')
-    lines.push(`- 目标：${route.goal || '（未填写）'}`)
-    lines.push(...boardLines(route.endBoard))
-    if (route.compromises.length) {
-      lines.push('- 妥协盘面（被手坑打断后仍能拿到）：')
-      for (const compromise of route.compromises) {
-        lines.push(
-          `  - 被「${compromise.handtrap}」（${compromise.headline}）：前场 ${listOrEmpty(compromise.endBoard.monsters)}；后场 ${listOrEmpty(compromise.endBoard.spells)}；手牌 ${listOrEmpty(compromise.endBoard.hand)}`,
-        )
-      }
-    }
-    lines.push('')
-  }
-  lines.push('> 自动层只给出「实际终场」与「吃手坑后的剩余盘面」。哪些算可接受、哪些必须重开，需要人工标注。', '')
-}
-
-function pushHandtrapSummary(lines: string[], routes: RouteReport[]) {
-  lines.push('## 阻抗时机（要点）', '')
-  if (!routes.length) {
-    lines.push('_没有路线，无法给出命中时点。_', '')
-    return
-  }
-  for (const route of routes) {
-    const worst = route.handtraps
-      .filter((item) => item.effective && item.verdict !== 'safe')
-      .sort((a, b) => verdictWeight(b.verdict) - verdictWeight(a.verdict))
-      .slice(0, 3)
-    if (!worst.length) continue
-    lines.push(`### ${route.comboName} / ${route.lineName}`, '')
-    for (const item of worst) {
-      const where = item.sites.length ? `第 ${item.sites.map((index) => index + 1).join('、')} 步` : '无法命中'
-      const dead = item.deadAt !== null ? `，第 ${item.deadAt + 1} 步起断链` : '，不断链'
-      lines.push(`- 「${item.name}」（${item.verdictLabel}）：${where}${dead}。${item.headline}`)
-    }
-    lines.push('')
-  }
-  lines.push('> 这里是「对手用手坑打断我方」的视角；我方手坑怎么用需要结合对局环境标注。', '')
 }
 
 function pushReplays(
@@ -665,32 +538,10 @@ function pushDeckSection(
   lines.push('')
 }
 
-function boardLines(board: EndBoard): string[] {
-  return [
-    `- 前场：${listOrEmpty(board.monsters)}`,
-    `- 后场：${listOrEmpty(board.spells)}`,
-    `- 手牌：${listOrEmpty(board.hand)}`,
-    `- 墓地：${listOrEmpty(board.gy)}`,
-    ...(board.banish.length ? [`- 除外：${board.banish.join('、')}`] : []),
-  ]
-}
-
-function statusText(status: string): string {
-  if (status === 'ok') return '正常'
-  if (status === 'partial') return '部分'
-  if (status === 'negated') return '被无效'
-  if (status === 'broken') return '断链'
-  return status
-}
-
 function coverageText(state: CoverageItem['state']): string {
   if (state === 'ok') return '达标'
   if (state === 'partial') return '部分'
   return '缺失'
-}
-
-function verdictWeight(verdict: string): number {
-  return verdict === 'lethal' ? 4 : verdict === 'danger' ? 3 : verdict === 'warning' ? 2 : verdict === 'safe' ? 1 : 0
 }
 
 function pct(value: number): string {
@@ -703,10 +554,6 @@ function round(value: number): number {
 
 function truncate(text: string): string {
   return text.length > MAX_DESC_LENGTH ? `${text.slice(0, MAX_DESC_LENGTH)}…` : text
-}
-
-function listOrEmpty(list: string[]): string {
-  return list.length ? list.join('、') : '空'
 }
 
 function listNames(codes: number[], nameOf: (code: number) => string): string {

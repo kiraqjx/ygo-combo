@@ -1,21 +1,15 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { createSampleCombo } from '@/data/sampleCombo'
-import { analyzeCombo } from '@/lib/timeline'
 import { useCardStore } from '@/stores/cards'
 import { useHandtrapStore } from '@/stores/handtraps'
 
 const cards = useCardStore()
 const ht = useHandtrapStore()
 
-/** 首页只留一条「示例战报」的数字，不放长段说明 */
-const demoLine = createSampleCombo().lines[0]
-const demo = analyzeCombo(demoLine)
-const ashSites = computed(() => demo.reports.find((report) => report.id === 'ash')?.sites.length ?? 0)
-
+/** 首页只留一行状态数字，不放长段说明 */
 const ticker = computed(
   () =>
-    `示例展开 · ${demoLine.timings.length} 个时序 · ${demo.links.length} 条链 · 灰流丽 ${ashSites.value} 个命中点`,
+    `卡池 ${cards.status === 'ready' ? cards.cards.length.toLocaleString() : '14,000+'} 张 · 手坑模型 ${ht.defs.length} 种 · 展开路线由绑定的 .yrp 录像自动生成`,
 )
 
 const stats = computed(() => [

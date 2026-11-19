@@ -11,7 +11,7 @@ import { atLeastOneChance, formatChance } from '@/lib/odds'
 import { allPresentChance, atLeastOneStarterChance } from '@/lib/starter'
 import { groupYdkCards, parseYdk, toYdk } from '@/lib/ydk'
 import { renderDeckPoster } from '@/lib/deckPoster'
-import { downloadBlob } from '@/lib/exportGif'
+import { downloadBlob } from '@/lib/download'
 import { copyImageToClipboard } from '@/lib/clipboard'
 import {
   exactOneMatch,

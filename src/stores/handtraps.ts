@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import type { HandtrapDef } from '@/lib/handtraps'
-import { BUILTIN_HANDTRAPS, syncHandtrapRegistry } from '@/lib/handtraps'
+import { BUILTIN_HANDTRAPS } from '@/lib/handtraps'
 import { uid } from '@/lib/infer'
 
 const STORAGE_KEY = 'ygo-infer-handtraps-v1'
@@ -64,9 +64,7 @@ function readStored(): HandtrapDef[] {
 }
 
 /**
- * 用户自定义手坑。
- * 每次提交都会同步给 `@/lib/handtraps` 的注册表，
- * 这样推理内核（timeline / infer）不用改签名也能用上自定义手坑。
+ * 用户自定义手坑：起手样本与 skill 包会用到这些定义。
  */
 export const useHandtrapStore = defineStore('handtraps', () => {
   const defs = ref<HandtrapDef[]>(readStored())
@@ -75,11 +73,8 @@ export const useHandtrapStore = defineStore('handtraps', () => {
 
   const map = computed(() => Object.fromEntries(defs.value.map((def) => [def.id, def])))
 
-  syncHandtrapRegistry(defs.value)
-
-  /** 提交：同步内核注册表 + 持久化 + 通知依赖方 */
+  /** 提交：持久化 + 通知依赖方 */
   function commit() {
-    syncHandtrapRegistry(defs.value)
     version.value += 1
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(defs.value))

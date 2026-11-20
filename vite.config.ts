@@ -135,16 +135,26 @@ function duelAssetPlugin(): Plugin {
  * 模型接口反代。
  *
  * 浏览器直连 api.deepseek.com 没有 CORS 头，密钥也不该裸露在跨域请求里，
- * 所以统一走同源 `/api/llm`，由这里转发。生产部署需要在反向代理上配同样的
- * location（见 README 的部署说明），目标地址可以用 VITE_LLM_PROXY_TARGET 覆盖。
+ * 所以统一走同源 `/api/llm`（OpenAI 兼容协议）与 `/api/anthropic`
+ * （Anthropic Messages 协议），由这里转发。生产部署需要在反向代理上配同样的
+ * location（见 README 的部署说明）。
+ *
+ * 目标地址可以用 VITE_LLM_PROXY_TARGET / VITE_ANTHROPIC_PROXY_TARGET 覆盖。
  */
 const LLM_PROXY_TARGET = process.env.VITE_LLM_PROXY_TARGET || 'https://api.deepseek.com'
+const ANTHROPIC_PROXY_TARGET =
+  process.env.VITE_ANTHROPIC_PROXY_TARGET || 'https://api.anthropic.com'
 
 const llmProxy = {
   '/api/llm': {
     target: LLM_PROXY_TARGET,
     changeOrigin: true,
     rewrite: (path: string) => path.replace(/^\/api\/llm/, ''),
+  },
+  '/api/anthropic': {
+    target: ANTHROPIC_PROXY_TARGET,
+    changeOrigin: true,
+    rewrite: (path: string) => path.replace(/^\/api\/anthropic/, ''),
   },
 }
 

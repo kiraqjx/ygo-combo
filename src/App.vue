@@ -68,12 +68,14 @@ onUnmounted(() => {
       </RouterLink>
 
       <nav class="nav">
-        <RouterLink to="/">总览</RouterLink>
+        <RouterLink to="/">首页</RouterLink>
+        <RouterLink to="/guide">使用说明</RouterLink>
         <RouterLink to="/cards">卡牌检索</RouterLink>
         <RouterLink to="/deck">卡组构建</RouterLink>
         <RouterLink to="/rates">启动率</RouterLink>
-        <RouterLink to="/duel">对局 / AI 代打</RouterLink>
-        <RouterLink to="/skills">AI Skill</RouterLink>
+        <RouterLink to="/duel">对战区</RouterLink>
+        <RouterLink to="/skills">对战分析</RouterLink>
+        <RouterLink to="/ai">AI 设置</RouterLink>
       </nav>
 
       <div class="header-right">

@@ -15,20 +15,21 @@ import type { DuelSignal, DuelSignalSpot } from './types'
  *   - 锁鸟：主要阶段里第一次「从卡组把卡加入手卡」之后（封住后续检索）
  *   - 原始生命态 尼比鲁：累计第 5 次召唤 / 特召（被无效的召唤不计数）
  *
- * 只报前 20 步：再往后的步骤已经不是「展开被拦」的范畴了。
+ * 这里返回**全量**：skill 包只挑前 `HANDTRAP_MAX_STEP` 步（再往后已经不算「展开被拦」），
+ * 但展开图与手坑报告要看完整展开，截断交给调用方（见 `replay.ts`）。
  *
  * 自排连锁（同一时点自己把多个效果排成 C1..Cn）时，对手只能在整条连锁排完后响应 Cn，
  * 前面几条吃不到手坑。这些点不会被删掉，而是标成 `dodged` 保留，
  * 用来告诉读者「这一步之所以安全，是因为前面排了自排连锁」。
  */
-/** 只看前多少步的手坑点 */
-const MAX_STEP = 20
+/** skill 包 / 录像列表只看前这么多步的手坑点 */
+export const HANDTRAP_MAX_STEP = 20
 
 /**
  * 手坑判定规则的版本号。
  * 改动判定逻辑后 +1：存下来的解析结果会因为版本号对不上而自动重跑内核。
  */
-export const HANDTRAP_ANALYSIS_VERSION = 11
+export const HANDTRAP_ANALYSIS_VERSION = 15
 
 export interface ReplayHandtrapHit {
   id: string
@@ -43,6 +44,12 @@ export interface ReplayHandtrapHit {
   effect: string
   /** instant = 无效这一次；rest-of-turn = 影响后续整条展开 */
   scope: 'instant' | 'rest-of-turn'
+  /**
+   * 命中点所在的事件流下标。
+   * 展开图用它与 `ReplayStep.signal` 对齐：同一张卡可能在场 / 在墓地各发动一次
+   * （墓地效果不吃泡影），只按卡名匹配会把命中贴到错的那一步。
+   */
+  signal?: number
   /**
    * 这一手落在自排连锁的前段：对手只能在整条连锁排完后响应最后一条，
    * 所以对手**实际上够不到这里**。保留下来是为了说明「自排连锁能规避手坑」这件事本身。
@@ -213,6 +220,7 @@ export function analyzeHandtrapHits(signals: DuelSignal[]): ReplayHandtrapHit[] 
       step: at,
       turn: signal.turn,
       phase: signal.phase,
+      signal: Math.max(0, index),
       trigger,
       effect,
       scope,
@@ -443,10 +451,8 @@ export function analyzeHandtrapHits(signals: DuelSignal[]): ReplayHandtrapHit[] 
     }
   }
 
-  // 只保留前 MAX_STEP 步：再往后的步骤已经不算「展开被拦」了
-  return hits
-    .filter((hit) => hit.step <= MAX_STEP)
-    .sort((a, b) => a.step - b.step || a.turn - b.turn)
+  // 全量返回：截断到前 HANDTRAP_MAX_STEP 步由调用方做（skill 包 vs 展开图 / 报告）
+  return hits.sort((a, b) => a.step - b.step || a.turn - b.turn)
 }
 
 /** 手坑名；被自排连锁规避的会在名字上标出来 */

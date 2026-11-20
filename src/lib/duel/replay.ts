@@ -3,8 +3,11 @@ import { parseReplay, type ParsedReplay } from './yrp'
 import {
   analyzeHandtrapHits,
   HANDTRAP_ANALYSIS_VERSION,
+  HANDTRAP_MAX_STEP,
   type ReplayHandtrapHit,
 } from './replayHandtraps'
+import { analyzeCardFlows, FLOW_VERSION, type FlowPick, type ReplayFlow } from './replayFlows'
+import { analyzeDrawHandtraps, type DrawHandtrapTurn } from './drawHandtraps'
 import type { DuelCapture } from './types'
 
 /**
@@ -33,6 +36,8 @@ export interface ReplayStep {
   /** 0 我方 / -1 系统（阶段、连锁结算等） */
   player: number
   text: string
+  /** 对应的事件流下标；展开图靠它把手坑命中点贴到正确的那一步 */
+  signal?: number
 }
 
 export interface ReplayDecision {
@@ -56,8 +61,27 @@ export interface ReplayAnalysis {
   turns: number
   steps: ReplayStep[]
   decisions: ReplayDecision[]
-  /** 潜在的手坑命中点（按事件流反推，不是录像里实际发生的） */
+  /** 潜在的手坑命中点（按事件流反推，不是录像里实际发生的）；只含前 `HANDTRAP_MAX_STEP` 步 */
   handtrapHits?: ReplayHandtrapHit[]
+  /**
+   * 同一份判定的**全量**命中点（不限步数）。
+   * skill 包与录像列表仍用 `handtrapHits`（前 20 步就够判断「展开被拦」），
+   * 展开图与手坑报告要看完整展开，所以单独存一份，避免为此重放内核。
+   */
+  handtrapHitsAll?: ReplayHandtrapHit[]
+  /**
+   * 抽卡型手坑（增殖的 G / 欢聚友伴）的收益：按回合列出「若对手在这一刻发动，
+   * 这回合还能抽几张」。它们不打断展开，所以单独统计，只给单份录像用。
+   */
+  drawHandtraps?: DrawHandtrapTurn[]
+  /**
+   * 「哪张卡把哪张卡挪到了哪」：卡与卡之间的区域转移（检索 / 堆墓 / 弃手卡 / 回收…）。
+   * 只记录确定性关系：随机抽卡 / 随机堆墓 / 随机除外不连成卡与卡。
+   * 旧缓存没有这一项、或 `flowVersion` 对不上时，检索图会按需重放一次补上。
+   */
+  flows?: ReplayFlow[]
+  /** 生成 flows 时的归因规则版本 */
+  flowVersion?: number
   /** 生成 handtrapHits 时的判定规则版本；和当前版本不一致就要重新解析 */
   analysisVersion?: number
   /** 录像没跑到结束（响应不够 / 内核报错） */
@@ -145,7 +169,7 @@ export async function analyzeReplay(
     // 对手是沙包，它的抽卡 / 结束回合对理解本卡组没有价值
     if (entry.player === 1) continue
     if (entry.text.startsWith('内核：')) continue
-    steps.push({ turn, phase, player: entry.player, text: entry.text })
+    steps.push({ turn, phase, player: entry.player, text: entry.text, signal: entry.signal })
   }
 
   for (const capture of session.captures) {
@@ -163,6 +187,8 @@ export async function analyzeReplay(
   }
 
   const kernelError = snapshot.logs.find((entry) => entry.kernel)?.kernel
+  // 判定只跑一次：skill 包要前 20 步，展开图 / 手坑报告要全量
+  const allHits = analyzeHandtrapHits(session.signals)
   return {
     ok: true,
     seed: parsed.seed.map((value) => value.toString(16)),
@@ -173,11 +199,57 @@ export async function analyzeReplay(
     turns: Math.max(turn, snapshot.state.turn),
     steps,
     decisions,
-    handtrapHits: analyzeHandtrapHits(session.signals),
+    handtrapHits: allHits.filter((hit) => hit.step <= HANDTRAP_MAX_STEP),
+    handtrapHitsAll: allHits,
+    drawHandtraps: analyzeDrawHandtraps(session.signals),
+    flows: analyzeCardFlows(session.signals, { picks: collectFlowPicks(session.captures) }),
+    flowVersion: FLOW_VERSION,
     analysisVersion: HANDTRAP_ANALYSIS_VERSION,
     incomplete: !snapshot.state.finished,
     kernelError,
   }
+}
+
+/**
+ * 玩家明确选过哪些卡，以及这条选卡在事件流里的位置。
+ *
+ * 内核只在「要从候选里挑卡」时发选卡提问；随机抽卡 / 随机堆墓 / 随机除外、
+ * 「双方手卡全部回到卡组」这类由内核自己决定，不会产生提问。
+ * 检索图用这张表区分「效果检索了这张」和「只是恰好落到这张」。
+ */
+function collectFlowPicks(captures: DuelCapture[]): FlowPick[] {
+  const picks: FlowPick[] = []
+  for (const capture of captures) {
+    if (capture.player !== 0) continue
+    if (capture.kind !== 'card' && capture.kind !== 'tribute' && capture.kind !== 'sum') continue
+    // 旧缓存的 capture 没有信号位置，只能跳过
+    if (typeof capture.signalIndex !== 'number') continue
+    const indexes = pickedIndexes(capture)
+    if (!indexes.length) continue
+    const names: string[] = []
+    for (const index of indexes) {
+      const name = capture.labels[index]
+      if (name) names.push(name)
+    }
+    if (names.length) picks.push({ index: capture.signalIndex, names })
+  }
+  return picks
+}
+
+/** card / tribute / sum 的响应布局：[0][张数][下标…]，首项 -1 表示取消 */
+function pickedIndexes(capture: DuelCapture): number[] {
+  const bytes = capture.response
+  if (bytes.byteLength < 8) return []
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+  if (view.getInt32(0, true) === -1) return []
+  const count = view.getInt32(4, true)
+  const picks: number[] = []
+  for (let index = 0; index < count; index += 1) {
+    const offset = 8 + index * 4
+    if (offset + 4 > bytes.byteLength) break
+    picks.push(view.getInt32(offset, true))
+  }
+  return picks
 }
 
 /** 把「提问 + 原始响应字节」翻译成一句人话 */

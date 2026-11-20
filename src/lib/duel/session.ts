@@ -365,6 +365,8 @@ export class DuelSession {
               labels: this.questionLabels(question),
               turn: this.state.turn,
               phase: this.state.phase,
+              // 回答这条提问时已经有多少条 signal：归因「这张卡是谁选的」要用
+              signalIndex: this.signals.length,
             })
           }
           this.writeRawResponse(bytes)
@@ -986,7 +988,9 @@ export class DuelSession {
 
   private pushLog(player: number, text: string) {
     this.logSeq += 1
-    this.logList.push({ id: this.logSeq, player, text })
+    // 记下对应的事件流下标：展开图靠它把手坑命中点贴到正确的那一步
+    // （`pushLogFor` 先 recordSignal 再写日志，所以这里要 -1）
+    this.logList.push({ id: this.logSeq, player, text, signal: Math.max(0, this.signals.length - 1) })
     if (this.logList.length > this.logLimit) this.logList.splice(0, this.logList.length - this.logLimit)
   }
 

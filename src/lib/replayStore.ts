@@ -5,7 +5,7 @@ import type { ReplayAnalysis } from '@/lib/duel/replay'
  * 绑在卡组上的 .yrp 录像。
  *
  * 二进制放 IndexedDB（localStorage 只能存字符串，几十 KB 的录像转 base64 又臭又长）；
- * 卡组删除后录像不会自动清，所以记录里带一份 deckName 方便在「AI Skill」页做孤儿展示。
+ * 卡组删除后录像不会自动清，所以记录里带一份 deckName 方便在「对战分析」页做孤儿展示。
  */
 
 const DB_NAME = 'ygo-skill'
@@ -141,6 +141,23 @@ export async function saveReplayAnalysis(
     tx.onerror = () => reject(tx.error)
   })
   return stripBytes(next)
+}
+
+/** 改录像的展示名（空名字视为不改） */
+export async function renameReplayBinding(id: string, name: string): Promise<ReplayBindingMeta | null> {
+  const clean = name.trim()
+  if (!clean) return null
+  const record = await loadReplayBinding(id)
+  if (!record || record.name === clean) return record ? stripBytes(record) : null
+  record.name = clean
+  const db = await openDb()
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(STORE, 'readwrite')
+    tx.objectStore(STORE).put(record)
+    tx.oncomplete = () => resolve()
+    tx.onerror = () => reject(tx.error)
+  })
+  return stripBytes(record)
 }
 
 /** 清掉所属卡组已经不存在的录像（删卡组不会连带动 IndexedDB） */

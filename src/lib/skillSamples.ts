@@ -4,7 +4,7 @@ import { buildRateModel, openingChance, type RateClause, type RatePlan } from '@
 import type { HandtrapDef } from '@/lib/handtraps'
 
 /**
- * 起手样本推导（AI Skill 自动层）。
+ * 起手样本推导（对战分析的自动层）。
  *
  * 输入是卡组 + 启动率配置（RatePlan 的启动条件 / 废件，或卡组页的简易启动组），
  * 输出是六类起手的概率与「代表起手」：

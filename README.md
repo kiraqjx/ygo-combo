@@ -16,6 +16,9 @@
 
 - combo 不再手工编排：打一局（或导入 `.yrp`）后「绑定到卡组」，录像就是这条构筑的路线样本。
 - 每份录像解析成起手、逐步操作、连锁与手坑命中点；启动点按**录像起手**自动关联（起手包含启动条件的全部卡才算命中）。详见「AI Skill 包」。
+- 每份录像可以一键导出**展开链长图**（`lib/replayPoster.ts`）：起手 + 按回合 / 阶段排下来的动作时间轴，命中手坑的步骤直接标在动作下面，可下载或复制进聊天窗。
+- 整套卡组可以导出**检索网络图**（`lib/flowPoster.ts` + `lib/duel/replayFlows.ts`）：汇总该卡组全部录像里「哪张卡把哪张卡从哪个区域挪到哪个区域」，卡片围成一圈，连线颜色代表区域转移类型（卡组→手卡 / 卡组→墓地 / 手卡→墓地 …），图例在图顶部。随机行为不算关系：抽卡、随机堆墓 / 随机除外不会在图上连成「谁检索到谁」，只画玩家真的选过的那张卡。弹窗里是活 canvas：点某张卡只留它与直接关联的卡和线，再点一次恢复。每份录像也能单独生成自己的检索图（只看这一条展开）。
+- **手坑报告**（`lib/handtrapReport.ts`）分两个入口，互不混合：卡组维度在页面右上角，看每个手坑总共能卡住几步、占全部展开步数的比例、命中多少份录像；单份维度在每份录像的按钮上，看这条展开一共几步、哪几步会吃手坑。两边都能导出 Markdown，「步数」与展开链长图同口径。报告不统计尼比鲁与锁鸟（它们是固定计数 / 一次性生效，读不出检索链信息），但录像里的手坑点照旧包含。单份报告还有第二块**抽卡型手坑**：按回合估算「对手在这一刻丢增殖的 G / 欢聚友伴，这回合还能抽几张」（欢聚友伴按手卡 / 卡组额外 / 墓地除外分别对应噗露莉娅 / 浮华洛丝 / 喵露丝）。录像名可以随时改（对战区结束时可填写，对战分析里点「改名」）。
 - 录像字节与解析结果存 IndexedDB，删除卡组不会连带清掉录像。
 
 ### 3. 起手与启动率
@@ -42,7 +45,7 @@
 - 幽鬼兔只能炸已经表侧表示在场的卡，卡片自身刚发动那一下炸不了。
 - 锁鸟只在主要阶段、只由检索触发。
 - **自排连锁**：同一时点自己排成 C1..Cn 时，对手只能响应最后一条，前面几条会被标成「已规避」——保留这些点是为了说明自排连锁的意义。
-- 只展示前 20 步的命中点。
+- 判定本身产出**全量**命中点；**skill 包与录像列表只取前 20 步**（再往后已经不算「展开被拦」），而**展开链长图与手坑报告用全量**，所以长图里能看到第 24 步这种靠后的手坑点。
 - 解析结果按规则版本号缓存在 IndexedDB，规则改动后会自动标为「手坑分析已过期」并提示重新解析。
 
 ### 6. AI Skill 包
@@ -51,7 +54,15 @@
 
 combo 通过录像录入：每份可解析的录像按**起手**挂到对应的启动点（单卡动点要求起手有那张卡，两卡 combo 要求两张同时在起手），生成 `20-replay-*.md`；启动点路由表里的 `file` 字段就指向这份路线文件。
 
-### 7. AI 代打
+除了本地推导，还可以点「**AI 生成 skill 包**」（需要先在「AI 设置」页开启 AI）：把卡组构筑、录像分片与手坑报告一起发给模型，让它改写 `00-router.md` / `90-fallback.md` 或新增对局思路分片（如 `10-matchup.md`），再与本地推导的骨架合并。模型失败时不会动现有包。
+
+生成结果（本地 / AI 都一样）按卡组存在浏览器里，切页、刷新后继续显示，**只有再次点生成才会覆盖**；每个文件都能直接编辑，也可以自己新增文件（「自定义」分组），改完保存即落盘。
+
+### 7. AI 设置与 AI 代打
+
+AI 相关配置集中在独立的「**AI 设置**」tab：只有总开关、接口协议（OpenAI 兼容 / Anthropic）、接口地址、密钥、模型五项，改动即时保存到 localStorage。**总开关没开（或没填密钥）时，「对战区」的 AI 代打与「对战分析」的 AI 生成 skill 包都会置灰。**
+
+温度、max_tokens、超时、工具轮数、skill 注入上限这些**仍然可以改**，只是默认值就是给本系统调好的那一组（`lib/ai/config.ts` 的 `RECOMMENDED_TUNING`）：决策要稳定所以温度 0.2、决策 512 token 够一个 JSON、超时 60 秒给慢网关留余量。一般不用动；遇到网关返回空白正文、输出被截断之类的问题再调，改坏了点「恢复推荐参数」整组写回。生成 skill 包时会自动把 max_tokens / 超时抬到推荐下限（8192 token / 180 秒），不需要单独设置。
 
 对局页可以开「AI 代打」，让模型接管我方操作。策略是**先规划、再执行、被打断才重规划**：
 
@@ -68,7 +79,22 @@ combo 通过录像录入：每份可解析的录像按**起手**挂到对应的�
 
 模型输出不是合法 JSON、空白内容或编号越界都会重试一次，仍失败则退回最保守的合法动作（单选：放弃响应 > 结束回合；多选：按固定顺序取满足条件的前几张），保证内核不会卡死。
 
-模型接入走 OpenAI 兼容协议（默认 `deepseek-flash`），配置存在 localStorage，不进对局记录。浏览器直连 `api.deepseek.com` 没有 CORS 头，因此默认请求本站的 `/api/llm` 反代（dev 由 Vite 转发，生产需在反向代理上加同样的 location）。
+模型接入支持两套协议，配置存在 localStorage（`ygo-ai-config`），不进对局记录。**接口地址是自由输入框**，不绑定任何服务商——下面的反代只是「浏览器直连会被 CORS 挡掉」时的默认值：
+
+- **OpenAI 兼容**：请求 `/chat/completions`，任何实现该格式的服务都能用（DeepSeek、OpenAI、OpenRouter、vLLM、One API / New API 网关…）。填根地址会自动补 `/chat/completions`，也可以直接填完整地址（含 query，如 Azure 的 `?api-version=`）。设置页有 DeepSeek / OpenAI / OpenRouter 的快捷填入，但它们只是示例。
+- **Anthropic**：请求 `/v1/messages`，密钥走 `x-api-key` 并带 `anthropic-version`，工具调用在内部转换成 `tool_use` / `tool_result`。地址同样可以填官方域名、第三方兼容网关或自建反代；直连 `api.anthropic.com` 时会带上允许浏览器访问的请求头，但仍受 CORS 限制。
+- 协议只决定**请求格式**，与地址无关：把 OpenAI 格式的服务地址填进「OpenAI 兼容」，把 Anthropic 格式的填进「Anthropic」即可。
+
+**关于 API Key：我们不保存你的密钥。** 本站是纯前端页面，没有后端与任何服务端存储，密钥不会被上传、收集或写进数据库；为了不用每次重填，它只写在你本机浏览器的 localStorage（`ygo-ai-config`），由页面在发请求时读取。对局记录、导出的 AI 决策日志（该项固定写「密钥：已省略」）与 skill 包文件都不含密钥。换设备 / 清理浏览器数据后需要重新填写，想让某个 Key 立刻失效请去服务商后台吊销。
+
+### 8. 使用说明与全站数据备份
+
+「使用说明」页（`/guide`，导航最后一项）把整条链路讲一遍：卡组 → 实战录像 → 展开分析 → skill 包 → AI 代打，并附功能导航表、AI 开启步骤和常见问题。首页也放了入口。
+
+同一页底部是**全站数据备份**（`lib/siteData.ts`）：
+
+- **导出**：把 localStorage 里的卡组、手坑配置、自定义卡、skill 包、暂存、主题、AI 配置，和 IndexedDB `ygo-skill` 里的全部录像打包成一个 `.json`（录像字节转 base64）。**不含 API Key**（字段清空），**不含卡库缓存**（十几 MB，可随时重新下载）。
+- **导入**：覆盖式恢复。同名 localStorage 项直接替换，录像库整表清空后重写；库里缺表时会按备份里的结构补建，所以换浏览器 / 换设备也能恢复。导入不会覆盖本机已有的 API Key，完成后自动刷新页面。
 
 ## 本地运行
 
@@ -97,14 +123,22 @@ location / {
 要用「AI 代打」还需要把模型请求反代成同源（否则浏览器会被 CORS 挡掉）：
 
 ```nginx
+# OpenAI 兼容（DeepSeek / 自建网关）
 location /api/llm/ {
   proxy_pass https://api.deepseek.com/;
   proxy_set_header Host api.deepseek.com;
   proxy_read_timeout 120s;
 }
+
+# Anthropic（只有选了 Anthropic 协议才需要）
+location /api/anthropic/ {
+  proxy_pass https://api.anthropic.com/;
+  proxy_set_header Host api.anthropic.com;
+  proxy_read_timeout 120s;
+}
 ```
 
-不想在站点侧转发的话，也可以在 AI 设置里把接口地址填成自己的网关，模型请求完全由浏览器直连。
+不想在站点侧转发的话，也可以在 AI 设置里把接口地址填成自己的网关，模型请求完全由浏览器直连。dev 环境的两个反代目标可用 `VITE_LLM_PROXY_TARGET` / `VITE_ANTHROPIC_PROXY_TARGET` 覆盖。
 
 ## 数据来源
 
@@ -126,26 +160,33 @@ src/
     rates.ts        # 起手 / 启动率计算（+ ratesWorker.ts）
     smallWorld.ts   # 小世界现象的两卡比较路径
     deckPoster.ts   # 卡组竖版长图
+    replayPoster.ts # 录像展开链长图
+    flowPoster.ts   # 卡组检索网络图
+    handtrapReport.ts # 手坑报告（单份录像 + 卡组维度）
     replayStore.ts  # 录像与解析结果（IndexedDB）
     skill.ts        # AI Skill 全量文档
     skillBundle.ts  # AI Skill 分片包
-    ai/             # AI 代打
-      provider.ts   # OpenAI 兼容的 chat completions 客户端
+    skillBundleStore.ts # 生成好的 skill 包本地存档（按卡组）
+    siteData.ts     # 全站数据备份 / 恢复（不含 API Key 与卡库缓存）
+    ai/             # AI 代打 / AI 生成
+      provider.ts   # 模型客户端（OpenAI 兼容 + Anthropic Messages）
       agent.ts      # 规划 → 执行 → 打断重规划的状态机
       question.ts   # 内核提问 → 编号候选动作
       board.ts      # 局面 → 文本
       prompt.ts     # 规划 / 决策 prompt 组装
       skillContext.ts # skill 分片索引与 read_skill 读取
-      config.ts     # 模型配置（localStorage）
+      skillWriter.ts # 卡组 + 录像 + 手坑报告 → AI 改写 skill 包
+      config.ts     # 模型配置（localStorage，含总开关与协议）
     duel/           # 真实对局引擎
       session.ts    # DuelSession：内核循环、提问、日志、信号
       types.ts      # DuelSignal / DuelStateView / DuelQuestion 等
       replay.ts     # .yrp → 步骤、决策、手坑命中点
       replayHandtraps.ts # 录像手坑判定规则
+      replayFlows.ts # 卡 → 卡的区域转移归因（检索图数据源）
       yrp.ts / checkpoint.ts / interaction.ts / response.ts / auto.ts …
   components/       # 卡图、详情、选择器、步骤编辑器、流程树、抗性面板、对局面板
-  views/            # 总览 / 检索 / 工坊 / 卡组 / 起手率 / 对局 / AI Skill
-  stores/           # Pinia：卡库、展开、卡组、手坑、主题
+  views/            # 首页 / 使用说明 / 检索 / 卡组 / 起手率 / 对局 / 对战分析 / AI 设置
+  stores/           # Pinia：卡库、卡组、手坑、主题
 ```
 
 ## 说明与局限

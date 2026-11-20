@@ -4137,6 +4137,15 @@ hr,
   border-radius: 8px;
 }
 
+/* 检索图是活的 canvas：点卡片看关联，光标提示可点 */
+.flow-preview canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
 .deck-result img {
   flex: none;
   width: 32px;

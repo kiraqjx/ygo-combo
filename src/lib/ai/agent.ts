@@ -1239,7 +1239,7 @@ export class AgentRunner {
     const options: ChatOptions =
       mode === 'plan'
         ? { thinking: config.thinking, maxTokens: Math.max(config.maxTokens, 4000) }
-        : { json: config.jsonMode, thinking: false, maxTokens: Math.max(config.maxTokens, 512) }
+        : { json: config.jsonMode, thinking: false, maxTokens: config.maxTokens }
     const tools = mode === 'plan' && this.deps.getSkill() ? [READ_SKILL] : undefined
 
     let remaining = tools ? config.toolRounds : 0

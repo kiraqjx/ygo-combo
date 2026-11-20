@@ -105,6 +105,12 @@ export interface DuelLogEntry {
   /** 0 我方 / 1 对手 / -1 系统 */
   player: number
   text: string
+  /**
+   * 这条日志对应的事件流下标（`signals` 里的位置）。
+   * 手坑命中点要精确贴到展开图上就用它对齐 —— 同一张卡在场 / 在墓地各发动一次时，
+   * 光看卡名分不出是哪一次。
+   */
+  signal?: number
   /** 内核报错的原文，用于同类报错合并计数 */
   kernel?: string
   repeat?: number
@@ -120,6 +126,12 @@ export interface DuelCapture {
   /** 提问时的回合 / 阶段，录像分析按它归组 */
   turn: number
   phase: number
+  /**
+   * 回答这个提问时已经产生了多少条 signal（提问在信号流里的位置）。
+   * 用来把「玩家选了哪张卡」和「紧接着哪张卡被移动」对上——
+   * 只有真的选过，才算确定性的检索 / 堆墓关系。
+   */
+  signalIndex?: number
 }
 
 /**

@@ -22,7 +22,7 @@ import type { DuelCardView, DuelDeck, DuelEvent, DuelPlayerId, DuelQuestion } fr
 import { useHandtrapStore } from '@/stores/handtraps'
 import { AgentRunner, type AgentStats, type AgentStatus, type AgentTrace } from '@/lib/ai/agent'
 import type { Plan } from '@/lib/ai/prompt'
-import { isAiReady, loadAiConfig, saveAiConfig, type AiConfig } from '@/lib/ai/config'
+import { isAiActive, loadAiConfig, type AiConfig } from '@/lib/ai/config'
 import { buildSkillSource, type SkillSource } from '@/lib/ai/skillContext'
 import { renderBoard } from '@/lib/ai/board'
 import { buildSkillBundle } from '@/lib/skillBundle'
@@ -30,7 +30,6 @@ import { listReplayBindings } from '@/lib/replayStore'
 import { downloadText } from '@/lib/toast'
 import type { SkillBindingInput, SkillInput } from '@/lib/skill'
 import DuelQuestionPanel from '@/components/duel/DuelQuestionPanel.vue'
-import ModelSettings from '@/components/ai/ModelSettings.vue'
 
 const deckStore = useDeckStore()
 const cardStore = useCardStore()
@@ -130,7 +129,6 @@ function describeOption(raw: bigint | number): string {
 const aiConfig = ref<AiConfig>(loadAiConfig())
 /** runner 持有这个对象的引用，设置改动即时生效，不用重开对局 */
 const liveAiConfig: AiConfig = { ...aiConfig.value }
-const aiSettingsOpen = ref(false)
 const aiEnabled = ref(false)
 const aiStatus = ref<AgentStatus>('idle')
 const aiReason = ref('')
@@ -145,7 +143,8 @@ const aiLogOpen = ref(false)
 const aiLogAll = ref(false)
 const aiPlan = ref<Plan | null>(null)
 
-const aiReady = computed(() => isAiReady(aiConfig.value))
+/** 「AI 设置」页开启总开关且填好密钥，才允许开代打 */
+const aiActive = computed(() => isAiActive(aiConfig.value))
 const aiBusy = computed(() => aiStatus.value === 'planning' || aiStatus.value === 'thinking')
 
 const AI_LOG_KINDS: Record<AgentTrace['kind'], string> = {
@@ -281,11 +280,13 @@ function buildAiLogReport(): string {
   lines.push(`- 日志条数：${aiLog.value.length}（其中规划 ${plans} 次）`)
 
   lines.push('', '## 模型配置', '')
-  lines.push(`- 端点：${config.baseUrl}｜模型：${config.model}｜温度：${config.temperature}｜maxTokens：${config.maxTokens}`)
+  lines.push(`- 协议：${config.protocol}｜端点：${config.baseUrl}｜模型：${config.model}`)
   lines.push(
-    `- json 模式：${config.jsonMode ? '开' : '关'}｜开局规划：${config.planOnStart ? '开' : '关'}｜思考模式：${config.thinking ? '开' : '关'}（${config.reasoningEffort}）`,
+    `- 温度：${config.temperature}｜maxTokens：${config.maxTokens}｜超时：${config.timeoutMs}ms｜工具轮数：${config.toolRounds}`,
   )
-  lines.push(`- 工具轮数：${config.toolRounds}｜skill 预算：${config.skillBudget}｜超时：${config.timeoutMs}ms`)
+  lines.push(
+    `- json 模式：${config.jsonMode ? '开' : '关'}｜开局规划：${config.planOnStart ? '开' : '关'}｜思考模式：${config.thinking ? '开' : '关'}（${config.reasoningEffort}）｜skill 预算：${config.skillBudget}`,
+  )
   lines.push('- 密钥：已省略')
   lines.push(`- 当前状态：${aiStatus.value}${aiError.value ? `｜错误：${aiError.value}` : ''}`)
 
@@ -348,13 +349,6 @@ function exportAiLog() {
   const name = (deckStore.current?.name || 'deck').replace(/[\\/:*?"<>|]/g, '_')
   downloadText(`ai-log-${name}-${stampText(Date.now())}.md`, buildAiLogReport())
   showToast(`已导出 AI 决策日志（${aiLog.value.length} 条）`)
-}
-
-function saveAiSettings(next: AiConfig) {
-  aiConfig.value = next
-  Object.assign(liveAiConfig, next)
-  saveAiConfig(next)
-  aiSettingsOpen.value = false
 }
 
 /** skill 包按卡表缓存：生成一次要跑手坑模拟，不能每次提问重算 */
@@ -500,6 +494,13 @@ watch(aiEnabled, async (on) => {
   aiReason.value = ''
   aiError.value = ''
   const runner = agent.value
+  // 总开关关着 / 没填密钥时不允许接管：按钮本身是置灰的，这里只是兜底
+  if (on && !aiActive.value) {
+    aiOffByRestart = true
+    aiEnabled.value = false
+    showToast('先到「AI 设置」页开启 AI 并填写密钥')
+    return
+  }
   if (!on) {
     const silent = aiOffByRestart
     aiOffByRestart = false
@@ -513,11 +514,6 @@ watch(aiEnabled, async (on) => {
   }
   if (!runner || !session.value) {
     showToast('先开始一局，再开启 AI 代打')
-    return
-  }
-  if (!aiReady.value) {
-    aiSettingsOpen.value = true
-    showToast('先填写 API Key')
     return
   }
   runner.reset()
@@ -958,18 +954,27 @@ function deleteCheckpoint(id: string) {
   checkpoints.value = removeCheckpoint(id)
 }
 
+/** 结束前给这局起个名字：绑定到卡组后就是录像列表里的展示名 */
+const replayNameInput = ref('')
+
+function defaultReplayName(): string {
+  const stamp = new Date().toISOString().slice(0, 16).replace('T', ' ')
+  return `${deckStore.current?.name || '未命名卡组'} · 第 ${state.value?.turn ?? 1} 回合 · ${stamp}`
+}
+
 function requestEndDuel() {
   if (!session.value) {
     immersive.value = false
     return
   }
+  replayNameInput.value = defaultReplayName()
   endConfirm.value = true
 }
 
 function finishDuel(mode: 'none' | 'export' | 'bind') {
-  if (mode === 'export') exportReplay()
+  if (mode === 'export') exportReplay(replayNameInput.value)
   // 绑定要在 stop 之前调用：它同步取出响应字节，await 之后才写 IndexedDB
-  if (mode === 'bind') void bindReplayToDeck()
+  if (mode === 'bind') void bindReplayToDeck(replayNameInput.value)
   endConfirm.value = false
   void exitWebFullscreen()
   agent.value?.stop()
@@ -999,28 +1004,28 @@ function replayBytes(): Uint8Array | null {
   })
 }
 
-function exportReplay() {
+function exportReplay(name = '') {
   const bytes = replayBytes()
   if (!bytes) return
   const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
-  downloadReplay(bytes, `combo-${stamp}.yrp`)
+  const clean = name.trim().replace(/[\\/:*?"<>|]/g, '_')
+  downloadReplay(bytes, `${clean || `combo-${stamp}`}.yrp`)
 }
 
-/** 绑定到当前卡组：AI Skill 页会把这些录像重放成展开说明 */
-async function bindReplayToDeck() {
+/** 绑定到当前卡组：对战分析页会把这些录像重放成展开说明 */
+async function bindReplayToDeck(name = '') {
   const bytes = replayBytes()
   const deckId = deckStore.currentDeckId
   if (!bytes || !deckId) return
   const deckName = deckStore.current?.name || '未命名卡组'
-  const stamp = new Date().toISOString().slice(0, 16).replace('T', ' ')
   try {
     await bindReplay({
       deckId,
       deckName,
-      name: `${deckName} · 第 ${state.value?.turn ?? 1} 回合 · ${stamp}`,
+      name: name.trim() || defaultReplayName(),
       bytes,
     })
-    showToast('已绑定到当前卡组，去「AI Skill」页生成展开说明')
+    showToast('已绑定到当前卡组，去「对战分析」页生成展开说明')
   } catch (error) {
     showToast(`绑定失败：${error instanceof Error ? error.message : String(error)}`)
   }
@@ -1482,8 +1487,14 @@ onBeforeUnmount(() => {
         v-if="session"
         class="btn sm"
         :class="{ primary: aiEnabled }"
-        :disabled="starting || replaying"
-        :title="aiEnabled ? 'AI 正在替你操作，随时可以关掉' : '让 AI 从起手规划路线并接管我方操作'"
+        :disabled="starting || replaying || !aiActive"
+        :title="
+          !aiActive
+            ? 'AI 未开启：先到「AI 设置」页打开总开关并填写密钥'
+            : aiEnabled
+              ? 'AI 正在替你操作，随时可以关掉'
+              : '让 AI 从起手规划路线并接管我方操作'
+        "
         @click="aiEnabled = !aiEnabled"
       >
         {{ aiEnabled ? 'AI 代打中' : 'AI 代打' }}
@@ -1491,7 +1502,9 @@ onBeforeUnmount(() => {
       <button v-if="aiLog.length" class="btn sm ghost" @click="aiLogOpen = true">
         日志 ({{ aiLog.length }})
       </button>
-      <button class="btn sm ghost" @click="aiSettingsOpen = true">AI 设置</button>
+      <RouterLink class="btn sm ghost" to="/ai" title="会离开当前对局，可先用「暂存」保存进度">
+        AI 设置
+      </RouterLink>
       <button class="btn sm" :disabled="starting" @click="launchDuel">重新开始</button>
       <button class="btn sm" :disabled="!session || starting || replaying" @click="saveCurrentCheckpoint">暂存</button>
       <button v-if="fullscreenSupported" class="btn sm" @click="toggleWebFullscreen">
@@ -1503,9 +1516,9 @@ onBeforeUnmount(() => {
 
     <div class="duel-head">
       <div>
-        <h1 class="page-title">combo 推演</h1>
+        <h1 class="page-title">对战区</h1>
         <p class="inline-note">
-          用「卡组构建」里的卡组推演一局，对手是只会结束回合的沙包。点场上的卡就能操作；结束时可以把过程导出成 .yrp，或绑定到卡组后在「AI Skill」页转成展开说明。
+          用「卡组构建」里的卡组推演一局，对手是只会结束回合的沙包。点场上的卡就能操作；结束时可以把过程导出成 .yrp，或绑定到卡组后在「对战分析」页转成展开说明。
         </p>
       </div>
       <div class="duel-head-actions">
@@ -1531,12 +1544,17 @@ onBeforeUnmount(() => {
             v-if="session"
             class="btn"
             :class="{ primary: aiEnabled }"
-            :disabled="starting || replaying"
+            :disabled="starting || replaying || !aiActive"
+            :title="
+              !aiActive ? 'AI 未开启：先到「AI 设置」页打开总开关并填写密钥' : undefined
+            "
             @click="aiEnabled = !aiEnabled"
           >
             {{ aiEnabled ? 'AI 代打中' : 'AI 代打' }}
           </button>
-          <button class="btn" @click="aiSettingsOpen = true">AI 设置</button>
+          <RouterLink class="btn" to="/ai" title="会离开当前对局，可先用「暂存」保存进度">
+            AI 设置
+          </RouterLink>
           <button class="btn primary" :disabled="starting" @click="launchDuel">
             {{ session ? '重新开始' : '开始对局' }}
           </button>
@@ -1575,8 +1593,16 @@ onBeforeUnmount(() => {
       <button class="btn sm ghost" @click="aiLogOpen = true">
         日志{{ aiLog.length ? ` (${aiLog.length})` : '' }}
       </button>
-      <button class="btn sm ghost" @click="aiSettingsOpen = true">设置</button>
-      <button class="btn sm" :class="{ primary: !aiEnabled }" @click="aiEnabled = !aiEnabled">
+      <RouterLink class="btn sm ghost" to="/ai" title="会离开当前对局，可先用「暂存」保存进度">
+        设置
+      </RouterLink>
+      <button
+        class="btn sm"
+        :class="{ primary: !aiEnabled }"
+        :disabled="!aiActive"
+        :title="!aiActive ? 'AI 未开启：先到「AI 设置」页打开总开关并填写密钥' : undefined"
+        @click="aiEnabled = !aiEnabled"
+      >
         {{ aiEnabled ? '接管回来' : '继续接管' }}
       </button>
     </div>
@@ -2003,8 +2029,12 @@ onBeforeUnmount(() => {
         <p class="end-text">
           这一局打了 {{ state?.turn ?? 0 }} 个回合。要不要把过程导出成 .yrp 录像？<br />
           导出后可以用任何支持回放的 YGO 客户端按你的操作重现这一局；<br />
-          绑定到卡组则会在「AI Skill」页被重放成这套卡组的展开说明。
+          绑定到卡组则会在「对战分析」页被重放成这套卡组的展开说明。
         </p>
+        <label class="end-name">
+          <span>录像名</span>
+          <input v-model="replayNameInput" class="input" spellcheck="false" placeholder="给这局起个名字" />
+        </label>
         <div class="end-actions">
           <button class="btn sm" @click="finishDuel('none')">直接结束</button>
           <button class="btn sm" :disabled="!canExport" @click="finishDuel('bind')">绑定到卡组并结束</button>
@@ -2136,14 +2166,6 @@ onBeforeUnmount(() => {
         </div>
       </section>
     </div>
-
-    <ModelSettings
-      :open="aiSettingsOpen"
-      :config="aiConfig"
-      :stats="aiStats"
-      @close="aiSettingsOpen = false"
-      @save="saveAiSettings"
-    />
   </section>
 </template>
 
@@ -2324,6 +2346,22 @@ onBeforeUnmount(() => {
   font-size: 12px;
   line-height: 1.6;
   color: var(--text-dim);
+}
+
+.end-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.end-name .input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 10px;
+  font-size: 12px;
 }
 
 .end-actions {

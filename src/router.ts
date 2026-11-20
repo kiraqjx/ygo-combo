@@ -9,6 +9,8 @@ const router = createRouter({
     { path: '/rates', name: 'rates', component: () => import('@/views/RatesView.vue') },
     { path: '/duel', name: 'duel', component: () => import('@/views/DuelView.vue') },
     { path: '/skills', name: 'skills', component: () => import('@/views/SkillsView.vue') },
+    { path: '/ai', name: 'ai', component: () => import('@/views/AiSettingsView.vue') },
+    { path: '/guide', name: 'guide', component: () => import('@/views/GuideView.vue') },
     { path: '/:pathMatch(.*)*', redirect: '/' },
   ],
   scrollBehavior() {

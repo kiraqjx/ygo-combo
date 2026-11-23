@@ -369,18 +369,20 @@ export const useDeckStore = defineStore('deck', () => {
       changed = true
     }
 
-    const fixSlot = (slot: { cardId: number; name: string }) => {
-      const hit = resolve(slot.cardId)
-      if (!hit) return
-      if (hit.id !== slot.cardId) {
-        slot.cardId = hit.id
-        slot.name = hit.name
+    const fixSlot = (slot: { cards: { id: number; name: string }[] }) => {
+      for (const card of slot.cards) {
+        const hit = resolve(card.id)
+        if (!hit) continue
+        if (hit.id !== card.id) {
+          card.id = hit.id
+          card.name = hit.name
+          changed = true
+          continue
+        }
+        if (!PLACEHOLDER_NAME.test(card.name) || hit.name === card.name) continue
+        card.name = hit.name
         changed = true
-        return
       }
-      if (!PLACEHOLDER_NAME.test(slot.name) || hit.name === slot.name) return
-      slot.name = hit.name
-      changed = true
     }
 
     const fixClauses = (clauses: RateClause[]) => {
@@ -413,7 +415,10 @@ export const useDeckStore = defineStore('deck', () => {
       const plan = deck.plan
       if (!plan) continue
       fixClauses(plan.starters)
-      for (const blocker of plan.blockers) for (const card of blocker.cards) fixEntry(card)
+      for (const blocker of plan.blockers) {
+        for (const card of blocker.cards) fixEntry(card)
+        fixClauses(blocker.exempt ?? [])
+      }
       for (const effect of plan.effects) fixClauses(effect.requirement)
     }
 

@@ -1,6 +1,12 @@
 import type { DeckEntry } from '@/types'
 import { allPresentChance } from '@/lib/starter'
-import { buildRateModel, openingChance, type RateClause, type RatePlan } from '@/lib/rates'
+import {
+  buildRateModel,
+  openingChance,
+  slotLabel,
+  type RateClause,
+  type RatePlan,
+} from '@/lib/rates'
 import type { HandtrapDef } from '@/lib/handtraps'
 
 /**
@@ -71,7 +77,12 @@ export function listStarterClauses(source: StarterSource): RateClause[] {
     .filter((group) => group.cards.length)
     .map((group, index) => ({
       id: group.id || `starter-${index}`,
-      slots: group.cards.map((id) => ({ cardId: id, name: source.nameOf(id), min: 1, max: null })),
+      slots: group.cards.map((id, slotIndex) => ({
+        id: `${group.id || index}-${slotIndex}`,
+        cards: [{ id, name: source.nameOf(id) }],
+        min: 1,
+        max: null,
+      })),
     }))
 }
 
@@ -120,7 +131,11 @@ export function buildSampleReport(input: SampleInput): SampleReport {
   const soloClauses = clauses.filter((clause) => requiredCount(clause) === 1)
   const comboClauses = clauses.filter((clause) => requiredCount(clause) >= 2)
   const starterIds = new Set(
-    clauses.flatMap((clause) => clause.slots.filter((slot) => slot.min > 0).map((slot) => slot.cardId)),
+    clauses.flatMap((clause) =>
+      clause.slots
+        .filter((slot) => slot.min > 0)
+        .flatMap((slot) => slot.cards.map((card) => card.id)),
+    ),
   )
   // 手坑卡同时也是启动卡时不算「额外的手坑」：这类卡按启动点讨论更准确
   const handtrapIds = handtrapCardIds(input.handtraps, main).filter((id) => !starterIds.has(id))
@@ -234,19 +249,15 @@ export function buildSampleReport(input: SampleInput): SampleReport {
   }
 }
 
-/** 启动组里需要「至少 1 张」的卡有几张 */
+/** 启动组里需要「至少 1 张」的卡有几张（「A 或 B」算两张） */
 function requiredCount(clause: RateClause): number {
-  return clause.slots.filter((slot) => slot.min > 0).length
+  return clause.slots
+    .filter((slot) => slot.min > 0)
+    .reduce((sum, slot) => sum + slot.cards.length, 0)
 }
 
 function clauseLabel(clause: RateClause): string {
-  const parts = clause.slots
-    .map((slot) => {
-      if (slot.min <= 0) return slot.max !== null ? `${slot.name} 至多 ${slot.max}` : ''
-      const range = slot.max !== null && slot.max > slot.min ? `${slot.min}~${slot.max}` : `${slot.min}`
-      return `${slot.name}×${range}`
-    })
-    .filter(Boolean)
+  const parts = clause.slots.map(slotLabel).filter(Boolean)
   return parts.join(' + ') || '（空启动组）'
 }
 
@@ -257,7 +268,9 @@ function rankClauses(clauses: RateClause[], main: DeckEntry[], draws: number): {
       clause,
       chance: allPresentChance(
         deckSize,
-        clause.slots.filter((slot) => slot.min > 0).map((slot) => copiesOf(main, slot.cardId)),
+        clause.slots
+          .filter((slot) => slot.min > 0)
+          .flatMap((slot) => slot.cards.map((card) => copiesOf(main, card.id))),
         draws,
       ),
     }))
@@ -279,21 +292,44 @@ function buildHand(
   for (const id of extra) want.set(id, (want.get(id) || 0) + 1)
   for (const slot of clause.slots) {
     if (slot.min <= 0) continue
-    const need = Math.min(slot.min, copiesOf(main, slot.cardId))
-    want.set(slot.cardId, Math.max(want.get(slot.cardId) || 0, need))
+    const pool = slot.cards.filter((card) => copiesOf(main, card.id) > 0)
+    if (!pool.length) continue
+    // 合计要够 min 张：单卡就放 min 张，多卡就轮着放
+    for (let i = 0; i < slot.min; i += 1) {
+      const card = pool[i % pool.length]
+      want.set(card.id, (want.get(card.id) || 0) + 1)
+    }
   }
 
   const hand: number[] = []
   for (const [id, count] of want) {
     for (let i = 0; i < count && hand.length < size; i += 1) hand.push(id)
   }
-  return fillHand(hand, size, main, exclude)
+  return fillHand(hand, size, main, exclude, clause)
 }
 
-function fillHand(hand: number[], size: number, main: DeckEntry[], exclude: Set<number>): number[] {
+/** 补位时同时照顾「合计 ≤N / =0」的检查，避免生成违反条件的样本 */
+function fillHand(
+  hand: number[],
+  size: number,
+  main: DeckEntry[],
+  exclude: Set<number>,
+  clause: RateClause,
+): number[] {
   const out = [...hand]
   const used = new Map<number, number>()
   for (const id of out) used.set(id, (used.get(id) || 0) + 1)
+
+  const fits = (id: number) => {
+    for (const slot of clause.slots) {
+      if (slot.max === null) continue
+      if (!slot.cards.some((card) => card.id === id)) continue
+      let sum = 0
+      for (const card of slot.cards) sum += used.get(card.id) || 0
+      if (sum + 1 > slot.max) return false
+    }
+    return true
+  }
 
   const pool = [...main]
     .filter((entry) => entry.count > 0 && !exclude.has(entry.id))
@@ -303,8 +339,8 @@ function fillHand(hand: number[], size: number, main: DeckEntry[], exclude: Set<
     guard += 1
     // 先让每种卡各出现 1 张，再补第二、第三张：比一路填同一张更像真实起手
     const next =
-      pool.find((entry) => (used.get(entry.id) || 0) === 0) ||
-      pool.find((entry) => (used.get(entry.id) || 0) < entry.count)
+      pool.find((entry) => (used.get(entry.id) || 0) === 0 && fits(entry.id)) ||
+      pool.find((entry) => (used.get(entry.id) || 0) < entry.count && fits(entry.id))
     if (!next) break
     out.push(next.id)
     used.set(next.id, (used.get(next.id) || 0) + 1)

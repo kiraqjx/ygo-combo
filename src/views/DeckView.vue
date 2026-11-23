@@ -20,6 +20,7 @@ import {
   type PropertyMatch,
 } from '@/lib/smallWorld'
 import CardDetail from '@/components/CardDetail.vue'
+import CardPicker from '@/components/CardPicker.vue'
 
 const cards = useCardStore()
 const deck = useDeckStore()
@@ -386,14 +387,18 @@ function availableStarterCards(used: number[]): DeckEntry[] {
   return deck.lists.main.filter((entry) => !used.includes(entry.id))
 }
 
-function onStarterCardPick(starterId: string, event: Event) {
-  const select = event.target as HTMLSelectElement
-  const id = Number(select.value)
-  if (id > 0) {
-    const outcome = deck.addStarterCard(starterId, id)
-    if (!outcome.ok) toast(outcome.message, true)
-  }
-  select.value = ''
+function starterPickerOptions(used: number[]) {
+  return availableStarterCards(used).map((entry) => ({
+    id: entry.id,
+    name: entry.name,
+    count: entry.count,
+  }))
+}
+
+function onStarterCardPick(starterId: string, cardId: number) {
+  if (!(cardId > 0)) return
+  const outcome = deck.addStarterCard(starterId, cardId)
+  if (!outcome.ok) toast(outcome.message, true)
 }
 
 /* ---- 模拟起手 ---- */
@@ -1187,16 +1192,12 @@ function refreshLibrary() {
               </span>
               <span v-if="!group.cards.length" class="inline-note">还没选卡</span>
             </div>
-            <select
-              class="select"
+            <CardPicker
+              :options="starterPickerOptions(group.cards)"
               :disabled="group.cards.length >= MAX_STARTER_CARDS"
-              @change="onStarterCardPick(group.id, $event)"
-            >
-              <option value="">＋ 从主卡组选择一张卡（{{ group.cards.length }} / {{ MAX_STARTER_CARDS }}）</option>
-              <option v-for="entry in availableStarterCards(group.cards)" :key="entry.id" :value="entry.id">
-                {{ entry.name }} ×{{ entry.count }}
-              </option>
-            </select>
+              :placeholder="`＋ 从主卡组选择一张卡（${group.cards.length} / ${MAX_STARTER_CARDS}）`"
+              @pick="(cardId) => onStarterCardPick(group.id, cardId)"
+            />
           </div>
 
           <div v-if="!starterGroups.length" class="empty">还没有配置启动组合</div>

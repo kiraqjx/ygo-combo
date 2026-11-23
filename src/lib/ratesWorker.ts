@@ -5,13 +5,15 @@
  * 放在主线程会让整页卡住。这里把整段计算搬到 Worker，
  * 页面照常响应，结果用 id 对账，晚到的旧结果直接丢弃。
  */
-import { solveRate, type RateOutcome, type RatePlan } from './rates'
+import { solveRate, type RateOutcome, type RatePlan, type SolveOptions } from './rates'
 import type { DeckEntry } from '@/types'
 
 export interface RateWorkerRequest {
   id: number
   deck: DeckEntry[]
   plan: RatePlan
+  /** 交叉校验会带 forceSim 进来，普通计算不需要 */
+  options?: SolveOptions
 }
 
 export interface RateWorkerResponse {
@@ -29,11 +31,11 @@ interface WorkerScope {
 const ctx = self as unknown as WorkerScope
 
 ctx.addEventListener('message', (event) => {
-  const { id, deck, plan } = event.data
+  const { id, deck, plan, options } = event.data
   if (!id) return
   let response: RateWorkerResponse
   try {
-    response = { id, outcome: solveRate(deck, plan), error: '' }
+    response = { id, outcome: solveRate(deck, plan, options), error: '' }
   } catch (error) {
     response = { id, outcome: null, error: error instanceof Error ? error.message : String(error) }
   }

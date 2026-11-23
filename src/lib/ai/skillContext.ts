@@ -154,16 +154,33 @@ export function buildSkillSource(bundle: SkillBundle | null): SkillSource | null
     }`,
     `手坑：${bundle.manifest.handtraps.map((item) => item.name).join('、') || '（无）'}`,
     `废件：${
-      bundle.manifest.bricks
-        .flatMap((brick) => brick.cards.map((card) => `${card.name}（上限 ${brick.allowance}，${brick.clear}）`))
-        .join('、') || '（无）'
+      [
+        ...bundle.manifest.bricks.flatMap((brick) =>
+          brick.cards.map(
+            (card) =>
+              `${card.name}（上限 ${brick.allowance}，${brick.clear}${
+                brick.exempt?.length ? `，与 ${brick.exempt.join(' / ')} 同手时豁免` : ''
+              }）`,
+          ),
+        ),
+        ...bundle.manifest.starters.flatMap((starter) =>
+          (starter.avoid ?? []).map((card) => `${card.name}（${starter.code} 不能上手）`),
+        ),
+      ].join('、') || '（无）'
     }`,
   ].join('\n')
 
   const roles = {
     starters: bundle.manifest.starters.flatMap((starter) => starter.requires.map((item) => item.name)),
     handtraps: bundle.manifest.handtraps.map((item) => item.name),
-    bricks: bundle.manifest.bricks.flatMap((brick) => brick.cards.map((card) => card.name)),
+    bricks: [
+      ...new Set([
+        ...bundle.manifest.bricks.flatMap((brick) => brick.cards.map((card) => card.name)),
+        ...bundle.manifest.starters.flatMap((starter) =>
+          (starter.avoid ?? []).map((card) => card.name),
+        ),
+      ]),
+    ],
   }
 
   return { deckName: bundle.manifest.deck.name, router, sections, index, brief, roles, replays, cardEffects }

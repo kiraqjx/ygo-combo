@@ -1,7 +1,7 @@
 import type { CardData, DeckEntry } from '@/types'
 import { HANDTRAP_FOOTNOTE, hitConsequenceText, hitNameText, hitPositionText } from './duel/replayHandtraps'
 import type { ReplayAnalysis, ReplayStep } from './duel/replay'
-import { buildRateModel, openingChance } from './rates'
+import { buildRateModel, openingChance, slotLabel, type RateClause } from './rates'
 import { buildSkillCoverage, type CoverageItem, type SkillInput } from './skill'
 import { buildSampleReport, listStarterClauses, type SampleReport } from './skillSamples'
 
@@ -27,6 +27,8 @@ export interface BundleStarter {
   code: string
   label: string
   requires: { code: number; name: string }[]
+  /** 启动条件里的「不能上手」卡：起手有的话这条路线不成立（旧存档没有这个字段） */
+  avoid?: { code: number; name: string }[]
   /** 先攻起手命中概率 */
   chance: number
   /** 后攻（多抽 1 张）命中概率 */
@@ -82,7 +84,13 @@ export interface BundleManifest {
   starters: BundleStarter[]
   replays: BundleReplay[]
   handtraps: { code: number; name: string; category: string }[]
-  bricks: { cards: { code: number; name: string }[]; allowance: number; clear: string }[]
+  bricks: {
+    cards: { code: number; name: string }[]
+    allowance: number
+    clear: string
+    /** 与其中任意一张同时上手时，这条废件不生效（旧存档没有这个字段） */
+    exempt?: string[]
+  }[]
   /** 卡号 → 角色（启动点 code / handtrap / brick / flex） */
   roles: Record<string, string[]>
   coverage: CoverageItem[]
@@ -116,6 +124,22 @@ function actionableSteps(steps: ReplayStep[]): ReplayStep[] {
   return steps.filter((step) => {
     const text = step.text.trim()
     return !STEP_NOISE.some((pattern) => pattern.test(text))
+  })
+}
+
+/** 启动条件的人话：必需卡 + 「不带 X / 最多 N 张 / 合计 N 张」 */
+function clauseLabel(clause: RateClause): string {
+  return clause.slots.map(slotLabel).filter(Boolean).join(' + ')
+}
+
+/** 一手具体的起手牌是否满足这条启动组（多卡检查按合计张数算） */
+function clauseMatchesOpening(clause: RateClause, opening: number[]): boolean {
+  const counts = new Map<number, number>()
+  for (const id of opening) counts.set(id, (counts.get(id) ?? 0) + 1)
+  return clause.slots.every((slot) => {
+    let sum = 0
+    for (const card of slot.cards) sum += counts.get(card.id) ?? 0
+    return sum >= slot.min && (slot.max === null || sum <= slot.max)
   })
 }
 
@@ -209,24 +233,43 @@ export function buildSkillBundle(input: SkillInput): SkillBundle {
   clauses.forEach((clause, index) => {
     const required = clause.slots.filter((slot) => slot.min > 0)
     if (!required.length) return
-    const requires = required.map((slot) => ({
-      code: slot.cardId,
-      name: slot.name || nameOf(slot.cardId) || `#${slot.cardId}`,
-    }))
-    const requiredIds = requires.map((item) => item.code)
-    // 起手里包含这套启动条件的录像 = 这条启动点的实战路线
-    const fromReplays = replaySources.filter((item) => requiredIds.every((id) => item.opening.includes(id)))
+    const requires = required.flatMap((slot) =>
+      slot.cards.map((card) => ({
+        code: card.id,
+        name: card.name || nameOf(card.id) || `#${card.id}`,
+      })),
+    )
+    // 「不能上手」的卡是这条路线的一部分：模型判断路由时必须看到
+    const avoid = clause.slots
+      .filter((slot) => slot.min <= 0 && slot.max === 0)
+      .flatMap((slot) =>
+        slot.cards.map((card) => ({
+          code: card.id,
+          name: card.name || nameOf(card.id) || `#${card.id}`,
+        })),
+      )
+    // 起手满足这条启动条件的录像 = 这条启动点的实战路线
+    const fromReplays = replaySources.filter((item) => clauseMatchesOpening(clause, item.opening))
     const code = `line-${String(index + 1).padStart(2, '0')}`
     starters.push({
       code,
-      label: requires.map((item) => item.name).join(' + '),
+      label: clauseLabel(clause) || requires.map((item) => item.name).join(' + '),
       requires,
+      avoid,
       chance: openingChance(model, [clause], blockers, samples.handSize),
       secondChance: openingChance(model, [clause], blockers, samples.secondHandSize),
       file: fromReplays[0]?.file ?? null,
       replays: fromReplays.map((item) => ({ code: item.code, name: item.name })),
     })
   })
+
+  // 「不能上手」的卡：只在所有路线里都只是禁止、从未被要求上手时，才算全局废件
+  const requiredIdSet = new Set(starters.flatMap((starter) => starter.requires.map((item) => item.code)))
+  for (const starter of starters) {
+    for (const card of starter.avoid ?? []) {
+      if (!requiredIdSet.has(card.code)) brickIds.add(card.code)
+    }
+  }
 
   // 卡号 → 角色
   const roles: Record<string, string[]> = {}
@@ -243,7 +286,10 @@ export function buildSkillBundle(input: SkillInput): SkillBundle {
 
   // 需要写完整卡效的卡：启动卡 + 手坑 + 废件 + 录像里实际用到的卡
   const usedCardIds = new Set<number>()
-  for (const starter of starters) for (const item of starter.requires) usedCardIds.add(item.code)
+  for (const starter of starters) {
+    for (const item of starter.requires) usedCardIds.add(item.code)
+    for (const item of starter.avoid ?? []) usedCardIds.add(item.code)
+  }
   for (const id of handtrapIds) usedCardIds.add(id)
   for (const id of brickIds) usedCardIds.add(id)
   /**
@@ -295,6 +341,9 @@ export function buildSkillBundle(input: SkillInput): SkillBundle {
       cards: blocker.cards.map((card) => ({ code: card.id, name: card.name })),
       allowance: blocker.allowance,
       clear: blocker.clear,
+      exempt: blocker.exempt.flatMap((clause) =>
+        clause.slots.flatMap((slot) => slot.cards.map((card) => card.name)),
+      ),
     })),
     roles,
     coverage,
@@ -365,6 +414,7 @@ function routerMarkdown(
           code: starter.code,
           label: starter.label,
           requires: starter.requires.map((item) => item.code),
+          avoid: (starter.avoid ?? []).map((item) => item.code),
           chance: round(starter.chance),
           secondChance: round(starter.secondChance),
           file: starter.file,
@@ -435,7 +485,14 @@ function routerMarkdown(
   lines.push('- 没有任何启动点 → 读 `90-fallback.md`；')
   lines.push('- 多个启动点同时成立 → 先加载命中率最高的那个文件，其余只在它被拦断后再看；')
   lines.push('- 抽到手坑 → 不影响启动判定，但要少 1 个展开位，防守优先；')
-  lines.push('- 废件超过 allowance：`never` 型直接判定无法启动，`leaveHand` 型视为可丢弃后继续；')
+  lines.push(
+    '- 启动点里的 `avoid` 是「不能上手」的卡：起手有其中任意一张，这条启动点就不成立，换别的启动点或直接防守；',
+  )
+  if (manifest.bricks.length) {
+    lines.push(
+      '- 另外还有全局废件：超过 allowance 时 `never` 型直接判定无法启动，`leaveHand` 型视为可丢弃后继续；若列了 `exempt`，与这些卡同手时该废件不生效；',
+    )
+  }
   lines.push(
     '- 路线分片是 `20-replay-*.md`：里面就是实战打法的完整流程与手坑命中点，按启动点表格里的文件名加载；卡效在 `cards/<卡号>.md`，没遇到就别读。',
     '',

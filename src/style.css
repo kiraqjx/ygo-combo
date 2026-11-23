@@ -4739,6 +4739,14 @@ hr,
   color: var(--text-dim);
 }
 
+/* 页头右侧：徽标 + 导出按钮 */
+.rates-head-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+}
+
 .rates-head-badges {
   display: flex;
   gap: 8px;
@@ -4850,6 +4858,12 @@ select.rate-mini {
 .rate-chip.gate {
   border-color: rgba(163, 113, 247, 0.32);
   background: rgba(163, 113, 247, 0.1);
+  /* 一条检查可能一口气并进十几张卡：要能换行，否则会撑成椭圆顶出面板 */
+  max-width: 100%;
+  flex-wrap: wrap;
+  border-radius: 10px;
+  row-gap: 3px;
+  line-height: 1.7;
 }
 
 /* 启动组的排除项：上手就作废的废件 */
@@ -4957,6 +4971,24 @@ select.rate-mini {
   display: inline-flex;
   align-items: center;
   gap: 2px;
+  /* 卡名不许被 flex 压窄成竖排 */
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+/* 合并了太多卡时的「＋N 张 / 收起」 */
+.rate-chip .rate-gate-more {
+  flex: 0 0 auto;
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  color: var(--violet);
+  font-size: 10.5px;
+  cursor: pointer;
+}
+
+.rate-chip .rate-gate-more:hover {
+  color: var(--text);
 }
 
 .rate-and {
@@ -5982,4 +6014,405 @@ select.rate-mini {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* ---------------- 启动率：可搜索选卡器 ---------------- */
+.card-picker {
+  position: relative;
+  display: inline-block;
+  min-width: 0;
+}
+
+.card-picker-trigger {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.18);
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.card-picker-trigger:hover {
+  border-color: var(--line-strong);
+  color: var(--text);
+}
+
+.card-picker-trigger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.card-picker-label {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card-picker-caret {
+  flex: 0 0 auto;
+  font-size: 10px;
+  color: var(--text-mute);
+}
+
+.card-picker-pop {
+  position: fixed;
+  z-index: 120;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: calc(100vw - 16px);
+  padding: 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: var(--panel);
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.5);
+}
+
+.card-picker-search {
+  height: 30px;
+  font-size: 12px;
+}
+
+.card-picker-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.card-picker-group {
+  padding: 6px 4px 2px;
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  color: var(--text-mute);
+}
+
+.card-picker-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 4px 6px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.card-picker-item:hover,
+.card-picker-item.active {
+  border-color: var(--line);
+  background: rgba(240, 243, 246, 0.06);
+  color: var(--text);
+}
+
+.card-picker-thumb {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 34px;
+  object-fit: cover;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.card-picker-name {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card-picker-hint {
+  flex: 0 0 auto;
+  font-size: 10px;
+  color: var(--cyan);
+  opacity: 0.75;
+}
+
+.card-picker-count {
+  flex: 0 0 auto;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--text-mute);
+}
+
+.card-picker-empty {
+  padding: 12px 8px;
+  font-size: 11.5px;
+  color: var(--text-mute);
+  text-align: center;
+}
+
+.card-picker-clear {
+  font-size: 11.5px;
+  color: var(--text-mute);
+}
+
+.rate-effect-pick {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* ---------------- 启动率：废件组合豁免 / 核对器 / 交叉校验 ---------------- */
+.rate-exempt {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.rate-exempt .card-picker {
+  flex: 1 1 170px;
+}
+
+.rate-mode-toggle {
+  height: 26px;
+  padding: 0 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.2);
+  color: var(--text-mute);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.rate-mode-toggle.on {
+  border-color: rgba(163, 113, 247, 0.4);
+  background: rgba(163, 113, 247, 0.12);
+  color: var(--violet, #a371f7);
+}
+
+.rate-mode-toggle:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.rate-chip.verify {
+  padding-right: 6px;
+}
+
+.rate-verify-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.rate-verify-title {
+  font-size: 11px;
+  color: var(--text-mute);
+}
+
+.rate-verify-row {
+  padding: 6px 8px;
+  border: 1px solid rgba(255, 123, 138, 0.24);
+  border-radius: 8px;
+  background: rgba(255, 123, 138, 0.05);
+}
+
+.rate-verify-row.ok {
+  border-color: rgba(95, 227, 161, 0.28);
+  background: rgba(95, 227, 161, 0.06);
+}
+
+.rate-verify-row.bad {
+  border-color: rgba(255, 106, 105, 0.35);
+  background: rgba(255, 106, 105, 0.08);
+}
+
+.rate-verify-label {
+  font-size: 11.5px;
+  color: var(--text);
+}
+
+.rate-verify-state {
+  float: right;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--text-mute);
+}
+
+.rate-verify-parts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+  font-size: 10.5px;
+  color: var(--text-mute);
+}
+
+.rate-verify-part {
+  padding: 1px 6px;
+  border: 1px solid rgba(255, 123, 138, 0.22);
+  border-radius: 999px;
+}
+
+.rate-verify-part.ok {
+  border-color: rgba(95, 227, 161, 0.3);
+  color: var(--green);
+}
+
+.rate-verify-part em {
+  font-style: normal;
+  color: var(--amber);
+}
+
+.rate-cross {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.rate-cross-result {
+  flex: 1 1 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.rate-cross-line {
+  font-size: 11.5px;
+  color: var(--text-dim);
+}
+
+.rate-cross-line.mute {
+  color: var(--text-mute);
+}
+
+.rate-note.green {
+  border-color: rgba(95, 227, 161, 0.3);
+  background: rgba(95, 227, 161, 0.08);
+  color: var(--green);
+}
+
+.rates-page .rate-group > .card-picker,
+.rates-page .rate-block > .card-picker {
+  width: 100%;
+}
+
+.starter-group > .card-picker {
+  width: 100%;
+}
+
+.rates-page .rate-chips > .card-picker {
+  flex: 1 1 160px;
+}
+
+.rates-page .rate-effect-pick {
+  width: auto;
+}
+
+.rates-page .rate-chip.exempt {
+  padding-right: 6px;
+  border-color: rgba(95, 227, 161, 0.3);
+  background: rgba(95, 227, 161, 0.08);
+  color: var(--green);
+}
+
+.rate-explain code {
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: rgba(240, 243, 246, 0.06);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--cyan);
+  word-break: break-word;
+}
+
+.rates-page .rate-or {
+  flex: 0 0 auto;
+  padding: 0 2px;
+  font-size: 10.5px;
+  color: var(--text-mute);
+}
+
+/* 启动率：废件写成「不能上手」槽位 */
+.rates-page .rate-chip.ban {
+  border-color: rgba(255, 123, 138, 0.32);
+  background: rgba(255, 123, 138, 0.08);
+  color: var(--red);
+}
+
+.rates-page .rate-mode-toggle.ban.on {
+  border-color: rgba(255, 123, 138, 0.35);
+  background: rgba(255, 123, 138, 0.1);
+  color: var(--red);
+}
+
+.rates-page .rate-verify-part.ban {
+  border-color: rgba(255, 123, 138, 0.32);
+  color: var(--red);
+}
+
+/* 启动率：一条检查 = 一组卡的合计区间 */
+.rates-page .rate-check-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 9px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: rgba(240, 243, 246, 0.02);
+}
+
+.rates-page .rate-check-row.ban {
+  border-color: rgba(255, 123, 138, 0.28);
+  background: rgba(255, 123, 138, 0.05);
+}
+
+/* 启动率：页面底部的独立辅助工具（废件 / 手坑），宽度跟上面的两栏对齐 */
+.rates-tools {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+
+@media (max-width: 900px) {
+  .rates-tools {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* 上手率小工具：条形表是「恰好 k 张」，右上角这个才是「至少 1 张」的汇总口径 */
+.rate-hand-stat {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--text-mute);
+  white-space: nowrap;
+}
+
+.rate-hand-stat b {
+  font-family: var(--mono);
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.rate-hand-stat.brick b {
+  color: var(--red);
+}
+
+.rate-hand-stat.handtrap b {
+  color: var(--amber);
 }

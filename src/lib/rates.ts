@@ -7,6 +7,7 @@
  *      每个槽位是一段张数区间 `min ≤ 手牌张数 ≤ max`，
  *      所以「必须上手」「同名双卡动」「手牌里最多 1 张」都用同一套判定。
  *   2. 否决（blockers）：废件。这些卡在手牌里合计超过 allowance 时——
+ *      `exempt` 非空且手牌满足 → 不算废件（和特定卡同手能打）；
  *      `clear: 'never'`     → 本局永久失败（之后丢牌 / 送墓也救不回）；
  *      `clear: 'leaveHand'` → 只看当前手牌，丢掉就解除。
  *   3. 转移（effects）：抽滤效果 = 一串算子，按顺序执行。
@@ -37,10 +38,14 @@ import type { DeckEntry } from '@/types'
 /* 类型                                                                */
 /* ------------------------------------------------------------------ */
 
-/** 一张卡在手牌里的数量区间 */
+/**
+ * 一组卡在手牌里的「合计张数」区间。
+ * 单卡检查就是 cards 只有一张；多张卡时约束的是它们的总数——
+ * 例如 { cards: [X, Y, Z], min: 0, max: 1 } = 这几张合计最多 1 张。
+ */
 export interface RateSlot {
-  cardId: number
-  name: string
+  id: string
+  cards: RateBlockerCard[]
   /** 至少几张（0 = 只做上限约束） */
   min: number
   /** 至多几张；null = 不限 */
@@ -64,7 +69,8 @@ export interface RateBlockerCard {
 
 /**
  * 废件（否决项）。
- * `cards` 里的卡在手牌中合计超过 `allowance` 张时触发。
+ * `cards` 里的卡在手牌中合计超过 `allowance` 张时触发；
+ * 但手牌满足 `exempt` 里任意一组时，这条废件不生效（组合豁免）。
  */
 export interface RateBlocker {
   id: string
@@ -73,6 +79,12 @@ export interface RateBlocker {
   allowance: number
   /** 生效区域；目前只有手牌 */
   zone: 'hand'
+  /**
+   * 组合豁免：与其中任意一组条件同时成立时，这条废件不再计入。
+   * 组间 OR、组内 AND，通常是一张「与它配合就能动」的卡。
+   * 为空数组 = 一刀切（超过额度即否决）。
+   */
+  exempt: RateCondition
   /**
    * 解除方式：
    *   leaveHand —— 只看当前手牌，丢掉 / 送墓后失效（占位型废件）
@@ -119,6 +131,13 @@ export interface RatePlan {
   /** 废件 */
   blockers: RateBlocker[]
   effects: RateEffect[]
+  /**
+   * 手填的废件张数。只是页面底部那块超几何查表的参数，
+   * 不参与上面的启动率求解，改它也不该让已算出的结果失效。
+   */
+  brickCount?: number
+  /** 手填的手坑张数，同上 */
+  handtrapCount?: number
 }
 
 /* ------------------------------------------------------------------ */
@@ -133,7 +152,8 @@ function nextId(prefix: string): string {
 
 export const MAX_REVEAL = 12
 export const MAX_DISCARD = 8
-export const MAX_SLOT = 3
+/** 一个检查里允许的合计张数上限（多张卡时可以到 6） */
+export const MAX_SLOT = 6
 
 function clampInt(value: unknown, min: number, max: number, fallback: number): number {
   const num = Math.floor(Number(value))
@@ -142,7 +162,14 @@ function clampInt(value: unknown, min: number, max: number, fallback: number): n
 }
 
 export function blankPlan(): RatePlan {
-  return { handSize: 5, starters: [], blockers: [], effects: [] }
+  return {
+    handSize: 5,
+    starters: [],
+    blockers: [],
+    effects: [],
+    brickCount: 0,
+    handtrapCount: 0,
+  }
 }
 
 export function blankClause(): RateClause {
@@ -155,12 +182,13 @@ export function blankBlocker(cardId: number, name: string): RateBlocker {
     cards: [{ id: cardId, name }],
     allowance: 0,
     zone: 'hand',
+    exempt: [],
     clear: 'never',
   }
 }
 
 export function blankSlot(cardId: number, name: string): RateSlot {
-  return { cardId, name, min: 1, max: null }
+  return { id: nextId('s'), cards: [{ id: cardId, name }], min: 1, max: null }
 }
 
 export function blankOp(kind: RateOp['kind'] = 'dig'): RateOp {
@@ -187,11 +215,23 @@ export function blankEffect(): RateEffect {
 }
 
 function normalizeSlot(raw: unknown): RateSlot | null {
+  // 旧版「简易启动组」直接存卡号
+  if (typeof raw === 'number') {
+    if (!(raw > 0)) return null
+    return { id: nextId('s'), cards: [{ id: raw, name: `#${raw}` }], min: 1, max: null }
+  }
   if (!raw || typeof raw !== 'object') return null
   const item = raw as Record<string, unknown>
-  const cardId = Number(item.cardId ?? item.id)
-  const name = String(item.name || '')
-  if (!(cardId > 0) || !name) return null
+  // 新格式：cards 是多张卡；旧格式：{ cardId, name } 单卡
+  let cards: RateBlockerCard[] = []
+  if (Array.isArray(item.cards)) {
+    cards = normalizeBlockerCards(item.cards)
+  } else {
+    const cardId = Number(item.cardId ?? item.id)
+    const name = String(item.name || '')
+    if (cardId > 0 && name) cards = [{ id: cardId, name }]
+  }
+  if (!cards.length) return null
   const min = clampInt(item.min ?? item.count, 0, MAX_SLOT, 1)
   const maxRaw = item.max
   let max: number | null = null
@@ -200,7 +240,7 @@ function normalizeSlot(raw: unknown): RateSlot | null {
     if (Number.isFinite(num)) max = clampInt(num, 0, MAX_SLOT, min)
   }
   if (max !== null && max < min) max = min
-  return { cardId, name, min, max }
+  return { id: String(item.id || nextId('s')), cards, min, max }
 }
 
 function normalizeClauses(value: unknown): RateCondition {
@@ -264,6 +304,7 @@ function normalizeBlockers(value: unknown): RateBlocker[] {
       cards,
       allowance: clampInt(item.allowance, 0, MAX_SLOT, 0),
       zone: 'hand',
+      exempt: normalizeClauses(item.exempt),
       clear: item.clear === 'leaveHand' ? 'leaveHand' : 'never',
     })
   }
@@ -304,6 +345,7 @@ function migrateLegacyPlan(data: Record<string, unknown>): {
     cards: [{ id, name: info.name }],
     allowance: info.allowance,
     zone: 'hand',
+    exempt: [],
     clear: info.clear,
   }))
   return { starters, blockers }
@@ -395,27 +437,137 @@ export function normalizePlan(raw: unknown): RatePlan {
     }
   }
 
-  return { handSize: clampInt(data.handSize, 1, 20, 5), starters, blockers, effects }
+  const handSize = clampInt(data.handSize, 1, 20, 5)
+
+  // 废件已经不再单独配置：旧存档读进来时直接折进启动条件，避免留下一份看不见的否决项
+  if (starters.length && blockers.length) {
+    const folded = foldBlockersIntoStarters({ handSize, starters, blockers, effects })
+    if (folded.ok) {
+      starters = folded.starters
+      blockers = []
+    }
+  }
+
+  return {
+    handSize,
+    starters,
+    blockers,
+    effects,
+    brickCount: clampInt(data.brickCount, 0, 60, 0),
+    handtrapCount: clampInt(data.handtrapCount, 0, 60, 0),
+  }
+}
+
+export function cloneSlot(slot: RateSlot): RateSlot {
+  return { ...slot, cards: slot.cards.map((card) => ({ ...card })) }
+}
+
+export function cloneClause(clause: RateClause): RateClause {
+  return { id: clause.id, slots: clause.slots.map(cloneSlot) }
+}
+
+export function cloneCondition(condition: RateCondition): RateCondition {
+  return condition.map(cloneClause)
+}
+
+/** 便于去重 / 比较：忽略顺序与 id */
+function clauseKey(clause: RateClause): string {
+  return clause.slots
+    .map((slot) => {
+      const ids = slot.cards
+        .map((card) => card.id)
+        .sort((a, b) => a - b)
+        .join(',')
+      return `${ids}:${slot.min}:${slot.max === null ? 'x' : slot.max}`
+    })
+    .sort()
+    .join('|')
+}
+
+/** 废件的「未超限」分支：这些卡合计 ≤ allowance（多卡就是一条合计检查） */
+function applyBlockerCap(clause: RateClause, blocker: RateBlocker): RateClause {
+  return {
+    id: clause.id,
+    slots: [
+      ...clause.slots.map(cloneSlot),
+      {
+        id: nextId('s'),
+        cards: blocker.cards.map((card) => ({ ...card })),
+        min: 0,
+        max: blocker.allowance,
+      },
+    ],
+  }
+}
+
+/**
+ * 旧版「全局废件」并入启动条件（一次性迁移）。
+ *
+ * 原语义：(∃ 启动组成立) ∧ 所有废件都没超限
+ *        = ∃ 启动组：(启动组 ∧ 废件 1 未超限 ∧ …)
+ * 每个废件对应一条「这些卡合计 ≤ allowance」的检查，有豁免时按「或」拆组。
+ */
+export function foldBlockersIntoStarters(
+  plan: RatePlan,
+  clauseLimit = 40,
+): { ok: true; starters: RateCondition } | { ok: false; reason: string } {
+  const blockers = plan.blockers
+  if (!blockers.length) {
+    return { ok: true, starters: cloneCondition(plan.starters) }
+  }
+  if (!plan.starters.length) {
+    return { ok: false, reason: '还没有启动组，先配置启动条件再迁移。' }
+  }
+
+  let groups: RateClause[] = plan.starters.map(cloneClause)
+  for (const blocker of blockers) {
+    const next: RateClause[] = []
+    for (const clause of groups) {
+      next.push(applyBlockerCap(clause, blocker))
+      for (const exempt of blocker.exempt) {
+        if (!exempt.slots.length) continue
+        next.push({
+          id: clause.id,
+          slots: [...clause.slots.map(cloneSlot), ...exempt.slots.map(cloneSlot)],
+        })
+      }
+    }
+    const seen = new Set<string>()
+    groups = next.filter((clause) => {
+      const key = clauseKey(clause)
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+    if (groups.length > clauseLimit) {
+      return {
+        ok: false,
+        reason: `展开后有 ${groups.length} 个启动组，太多了；请先把旧废件拆成单条再迁移。`,
+      }
+    }
+  }
+
+  return {
+    ok: true,
+    starters: groups.map((clause) => ({ id: nextId('m'), slots: clause.slots.map(cloneSlot) })),
+  }
 }
 
 export function clonePlan(plan: RatePlan): RatePlan {
   return {
     handSize: plan.handSize,
-    starters: plan.starters.map((clause) => ({
-      id: clause.id,
-      slots: clause.slots.map((slot) => ({ ...slot })),
-    })),
+    brickCount: plan.brickCount ?? 0,
+    handtrapCount: plan.handtrapCount ?? 0,
+    starters: cloneCondition(plan.starters),
     blockers: plan.blockers.map((blocker) => ({
       ...blocker,
       cards: blocker.cards.map((card) => ({ ...card })),
+      exempt: cloneCondition(blocker.exempt),
     })),
     effects: plan.effects.map((effect) => ({
       ...effect,
       ops: effect.ops.map((op) => ({ ...op })),
-      requirement: effect.requirement.map((clause) => ({
-        id: clause.id,
-        slots: clause.slots.map((slot) => ({ ...slot })),
-      })),
+      requirement: cloneCondition(effect.requirement),
     })),
   }
 }
@@ -424,26 +576,46 @@ export function clonePlan(plan: RatePlan): RatePlan {
 /* 判定                                                                */
 /* ------------------------------------------------------------------ */
 
-function slotHolds(count: number, slot: RateSlot): boolean {
+export function slotHolds(count: number, slot: RateSlot): boolean {
   if (count < slot.min) return false
   if (slot.max !== null && count > slot.max) return false
   return true
 }
 
-/** 一组槽位是否全部满足 */
+/** 一条检查的人话：单卡沿用旧写法，多卡写成「合计」 */
+export function slotLabel(slot: RateSlot): string {
+  const names = slot.cards.map((card) => card.name)
+  if (!names.length) return ''
+  const label = names.length > 1 ? `${names.join('、')} 合计` : names[0]
+  if (slot.min <= 0) {
+    if (slot.max === null) return ''
+    return slot.max === 0 ? `不带 ${names.join('、')}` : `${label}≤${slot.max}`
+  }
+  if (slot.min === 1 && (slot.max === null || slot.max === 1)) {
+    return names.length > 1 ? `${label}至少 1` : names[0]
+  }
+  if (names.length === 1) {
+    if (slot.max === null || slot.max === slot.min) return `${names[0]}×${slot.min}`
+    return `${names[0]} ${slot.min}~${slot.max}`
+  }
+  if (slot.max === null) return `${label}≥${slot.min}`
+  if (slot.max === slot.min) return `${label}=${slot.min}`
+  return `${label}${slot.min}~${slot.max}`
+}
+
+/** 一组检查是否全部满足（每条检查算的是 cards 的合计张数） */
 export function clauseHolds(
   hand: number[],
   clause: RateClause,
   index: Map<number, number>,
 ): boolean {
   for (const slot of clause.slots) {
-    const at = index.get(slot.cardId)
-    if (at === undefined) {
-      // 卡组里没有这张牌：只要要求「至少 1 张」，就永远不成立
-      if (slot.min > 0) return false
-      continue
+    let sum = 0
+    for (const card of slot.cards) {
+      const at = index.get(card.id)
+      if (at !== undefined) sum += hand[at] || 0
     }
-    if (!slotHolds(hand[at] || 0, slot)) return false
+    if (!slotHolds(sum, slot)) return false
   }
   return true
 }
@@ -474,6 +646,20 @@ export function blockerCount(
   return total
 }
 
+/**
+ * 某条废件此刻是否真的在卡手。
+ * 超过额度，并且手牌不满足它的组合豁免条件，才算生效。
+ */
+export function blockerActive(
+  hand: number[],
+  blocker: RateBlocker,
+  index: Map<number, number>,
+): boolean {
+  if (blockerCount(hand, blocker, index) <= blocker.allowance) return false
+  if (blocker.exempt.length && meets(hand, blocker.exempt, index)) return false
+  return true
+}
+
 /** 软废件：当前超限，丢掉可解除 */
 export function blockedSoft(
   hand: number[],
@@ -482,7 +668,7 @@ export function blockedSoft(
 ): boolean {
   for (const blocker of blockers) {
     if (blocker.clear !== 'leaveHand') continue
-    if (blockerCount(hand, blocker, index) > blocker.allowance) return true
+    if (blockerActive(hand, blocker, index)) return true
   }
   return false
 }
@@ -495,7 +681,26 @@ export function blockedHard(
 ): boolean {
   for (const blocker of blockers) {
     if (blocker.clear !== 'never') continue
-    if (blockerCount(hand, blocker, index) > blocker.allowance) return true
+    if (blockerActive(hand, blocker, index)) return true
+  }
+  return false
+}
+
+/**
+ * 无可挽回的硬废件：已经超限，而且没有豁免条件。
+ * 带豁免的硬废件不能在这里判死——后面抽到配合卡还有机会解除，
+ * 所以给它留一条活路，由后续算子继续推进。
+ */
+export function blockedHopeless(
+  hand: number[],
+  blockers: RateBlocker[],
+  index: Map<number, number>,
+): boolean {
+  for (const blocker of blockers) {
+    if (blocker.clear !== 'never') continue
+    if (!blockerActive(hand, blocker, index)) continue
+    if (blocker.exempt.length) continue
+    return true
   }
   return false
 }
@@ -553,7 +758,9 @@ export function buildRateModel(
 
   const visitCondition = (condition: RateCondition) => {
     for (const clause of condition) {
-      for (const slot of clause.slots) add(slot.cardId, slot.name)
+      for (const slot of clause.slots) {
+        for (const card of slot.cards) add(card.id, card.name)
+      }
     }
   }
 
@@ -561,6 +768,8 @@ export function buildRateModel(
   for (const extra of extras) visitCondition(extra)
   for (const blocker of blockers) {
     for (const card of blocker.cards) add(card.id, card.name)
+    // 豁免条件里引用的卡也要单独成类，否则会被并进 filler、判定失真
+    visitCondition(blocker.exempt)
   }
 
   const copies = new Map<number, number>()
@@ -824,12 +1033,16 @@ class ExactSolver {
     let best = 0
     for (const clause of this.starters) {
       for (const slot of clause.slots) {
-        if (this.model.index.get(slot.cardId) !== at) continue
-        const have = hand[at] || 0
+        if (!slot.cards.some((card) => this.model.index.get(card.id) === at)) continue
+        let sum = 0
+        for (const card of slot.cards) {
+          const pos = this.model.index.get(card.id)
+          if (pos !== undefined) sum += hand[pos] || 0
+        }
         // 已经到上限了，再拿也没用
-        if (slot.max !== null && have >= slot.max) continue
+        if (slot.max !== null && sum >= slot.max) continue
         const need = Math.max(1, slot.min)
-        best = Math.max(best, have < need ? 1 : 0.25)
+        best = Math.max(best, sum < need ? 1 : 0.25)
       }
     }
     return best
@@ -951,8 +1164,9 @@ class ExactSolver {
   /** 执行到第 i 个算子之前（手牌 hand / 牌库 deck）时的最终启动概率 */
   value(i: number, hand: number[], deck: number[]): number {
     if (reached(hand, this.starters, this.blockers, this.model.index)) return 1
-    // 硬废件已经上手：这一局到此为止，后面的丢牌 / 送墓都不能翻盘
-    if (blockedHard(hand, this.blockers, this.model.index)) return 0
+    // 没救的硬废件：这一局到此为止，后面的丢牌 / 送墓都不能翻盘。
+    // 带豁免的硬废件不在此列：后面抽到配合卡还能把这条废件解掉。
+    if (blockedHopeless(hand, this.blockers, this.model.index)) return 0
     if (i >= this.steps.length) return 0
 
     const key = `${i}|${hand.join('.')}|${deck.join('.')}`
@@ -1024,24 +1238,43 @@ function helpScore(
   at: number,
   hand: number[],
   starters: RateCondition,
+  blockers: RateBlocker[],
   index: Map<number, number>,
 ): number {
+  // 手上有卡住的废件时，能触发豁免的牌优先级最高
+  for (const blocker of blockers) {
+    if (!blockerActive(hand, blocker, index)) continue
+    for (const clause of blocker.exempt) {
+      if (clause.slots.some((slot) => slot.cards.some((card) => index.get(card.id) === at))) return 2
+    }
+  }
   let best = 0
   for (const clause of starters) {
     let missing = 0
     let helps = false
     for (const slot of clause.slots) {
-      const pos = index.get(slot.cardId)
-      if (pos === undefined) {
-        if (slot.min > 0) missing += 99
+      let sum = 0
+      let dead = false
+      let inSlot = false
+      for (const card of slot.cards) {
+        const pos = index.get(card.id)
+        if (pos === undefined) {
+          // 卡组里没有这张牌：这条检查只要还要求至少 1 张，就永远凑不齐
+          if (slot.min > 0) dead = true
+          continue
+        }
+        if (pos === at) inSlot = true
+        sum += hand[pos] || 0
+      }
+      if (dead) {
+        missing += 99
         continue
       }
-      const have = hand[pos] || 0
-      if (slot.max !== null && have >= slot.max) continue
+      if (slot.max !== null && sum >= slot.max) continue
       const need = Math.max(1, slot.min)
-      if (have < need) {
-        missing += need - have
-        if (pos === at) helps = true
+      if (sum < need) {
+        missing += need - sum
+        if (inSlot) helps = true
       }
     }
     if (helps) best = Math.max(best, 1 / (missing + 1))
@@ -1057,18 +1290,22 @@ function dropScore(
   blockers: RateBlocker[],
   index: Map<number, number>,
 ): number {
-  // 手上有超额的废件：最先丢
+  // 手上有真正卡住的废件：最先丢
   for (const blocker of blockers) {
     if (!blocker.cards.some((card) => index.get(card.id) === at)) continue
-    if (blockerCount(hand, blocker, index) > blocker.allowance) return -1
+    if (blockerActive(hand, blocker, index)) return -1
   }
   let best = 0
   for (const clause of starters) {
     for (const slot of clause.slots) {
-      if (index.get(slot.cardId) !== at) continue
+      if (!slot.cards.some((card) => index.get(card.id) === at)) continue
+      let sum = 0
+      for (const card of slot.cards) {
+        const pos = index.get(card.id)
+        if (pos !== undefined) sum += hand[pos] || 0
+      }
       const need = Math.max(1, slot.min)
-      const have = hand[at] || 0
-      best = Math.max(best, have <= need ? 1 : 0.2)
+      best = Math.max(best, sum <= need ? 1 : 0.2)
     }
   }
   return best
@@ -1110,8 +1347,8 @@ function simulateRate(
       steps[0] += 1
       continue
     }
-    // 起手就带硬废件：这一局已经结束
-    if (blockedHard(hand, plan.blockers, model.index)) continue
+    // 起手就带没救的硬废件：这一局已经结束
+    if (blockedHopeless(hand, plan.blockers, model.index)) continue
 
     let solvedAt = -1
     let dead = false
@@ -1156,7 +1393,7 @@ function simulateRate(
             let bestAt = 0
             let bestScore = -1
             for (let i = 0; i < remain.length; i += 1) {
-              const score = helpScore(remain[i], hand, plan.starters, model.index)
+              const score = helpScore(remain[i], hand, plan.starters, plan.blockers, model.index)
               if (score > bestScore) {
                 bestScore = score
                 bestAt = i
@@ -1166,8 +1403,8 @@ function simulateRate(
             hand[picked] += 1
           }
           if (op.sink === 'bottom' && remain.length) deck.unshift(...remain)
-          // 抽到硬废件：这条线当场断掉，后面丢牌也救不回来
-          if (blockedHard(hand, plan.blockers, model.index)) {
+          // 抽到没救的硬废件：这条线当场断掉，后面丢牌也救不回来
+          if (blockedHopeless(hand, plan.blockers, model.index)) {
             dead = true
             break
           }
@@ -1251,7 +1488,17 @@ export interface SolveOptions {
   stateLimit?: number
   trials?: number
   seed?: number
+  /**
+   * 强制走蒙特卡洛，不做精确枚举。
+   * 只给「交叉校验」用：拿同一份配置的仿真结果和精确解对照，
+   * 让用户看到两套口径是否吻合。
+   */
+  forceSim?: boolean
 }
+
+/** 仿真的默认抽样次数与随机种子：同一份配置 + 同一个种子 → 同一个结论 */
+export const DEFAULT_TRIALS = 20_000
+export const DEFAULT_SEED = 20_260_101
 
 function emptyOutcome(effects: number, started: number): RateOutcome {
   return {
@@ -1280,14 +1527,21 @@ export function solveRate(deck: DeckEntry[], plan: RatePlan, options: SolveOptio
 
   const { steps, starts } = buildSteps(plan.effects)
   const limit = options.stateLimit ?? DEFAULT_STATE_LIMIT
-  try {
-    const result = solveExact(model, plan, steps, starts, opening, limit, started + EXACT_BUDGET_MS)
-    return { ...result, elapsed: Date.now() - started }
-  } catch (error) {
-    if (!(error instanceof BudgetError)) throw error
+  if (!options.forceSim) {
+    try {
+      const result = solveExact(model, plan, steps, starts, opening, limit, started + EXACT_BUDGET_MS)
+      return { ...result, elapsed: Date.now() - started }
+    } catch (error) {
+      if (!(error instanceof BudgetError)) throw error
+    }
   }
 
-  const simulated = simulateRate(model, plan, options.trials ?? 20000, options.seed ?? 20260101)
+  const simulated = simulateRate(
+    model,
+    plan,
+    options.trials ?? DEFAULT_TRIALS,
+    options.seed ?? DEFAULT_SEED,
+  )
   return { ...simulated, elapsed: Date.now() - started }
 }
 
@@ -1345,7 +1599,7 @@ function solveExact(
   let alive: Candidate[] = []
   for (const state of start) {
     if (reached(state.hand, plan.starters, plan.blockers, model.index)) steps2[0] += state.p
-    else if (!blockedHard(state.hand, plan.blockers, model.index)) alive.push(state)
+    else if (!blockedHopeless(state.hand, plan.blockers, model.index)) alive.push(state)
   }
 
   for (let e = 0; e < plan.effects.length; e += 1) {
@@ -1368,8 +1622,8 @@ function solveExact(
           for (const cand of solver.expand(index, item.hand, item.deck)) {
             const p = item.p * cand.p
             if (p <= 0) continue
-            // 硬废件上手：这条线到此为止
-            if (blockedHard(cand.hand, plan.blockers, model.index)) continue
+            // 没救的硬废件上手：这条线到此为止
+            if (blockedHopeless(cand.hand, plan.blockers, model.index)) continue
             out.push({ p, hand: cand.hand, deck: cand.deck })
           }
         }
@@ -1446,7 +1700,7 @@ function traceEffectsInner(
   let deadOpening = 0
   for (const state of start) {
     if (reached(state.hand, plan.starters, plan.blockers, model.index)) continue
-    if (blockedHard(state.hand, plan.blockers, model.index)) {
+    if (blockedHopeless(state.hand, plan.blockers, model.index)) {
       deadOpening += state.p
       continue
     }
@@ -1535,7 +1789,7 @@ function traceEffectsInner(
         for (const cand of solver.expand(index, item.hand, item.deck)) {
           const p = item.p * cand.p
           if (p <= 0) continue
-          if (blockedHard(cand.hand, plan.blockers, model.index)) {
+          if (blockedHopeless(cand.hand, plan.blockers, model.index)) {
             dead += p
             continue
           }

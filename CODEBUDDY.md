@@ -127,6 +127,15 @@ AI 配置从「对战区」的弹窗**提取成了独立 tab**（路由 `/ai`，
 - **单步决策的候选会带上录像步骤标注**：`pickReplayRoute()` 用「手卡 + 墓地 + 当前连锁」当焦点挑一条录像，`alignReplaySteps()` 按「动作词 + 卡名」把候选对到 `〔录像第 N 步：…〕`（`不发动` / `取消` / `结束回合` 这类负面候选不参与，否则「不发动」会被当成「发动」）。`option`（效果分支）提问还必须在标题里点名「正在处理『某卡』的效果」，因为内核只给「伤害改变 / 盖放魔陷」这种脱离卡名的分支名，模型单看候选无法和录像对上。
 - **`AgentTrace` 是对外的决策日志**：每条带 `kind`（`plan` / `replan` / `decide` / `auto` / `fallback` / `interrupt`）、`title`、`detail`、模型给的 `reason`、候选数、耗时与 token 增量（`mark()` / `since()` 算差值）。`DuelView` 把它渲染成右侧日志抽屉，`auto` 类（唯一候选、只能全选）默认折叠。加新的决策分支时记得补一条 trace，否则界面上会「跳步」。**日志抽屉支持「导出日志」**（`DuelView.buildAiLogReport()` → `ai-log-<卡组>-<时间>.md`）：除了每条 trace 的完整请求 / 返回，还打包了模型配置（密钥省略）、skill 是否加载、录像解析状态、当前盘面与累计用量——排查「为什么没照录像打」光看 trace 是看不出 skill 有没有生效的。日志裁剪（`AI_LOG_MAX`）优先保留 `plan` / `replan` / `interrupt`，否则一整局的流水会把开局的规划挤掉。
 
+### 启动率（`views/RatesView.vue`、`lib/rates.ts`、`ratesWorker.ts`、`lib/ratesPoster.ts`）
+
+- **进页面不自动算**：求解只由「开始计算」按钮或「导出图片」触发，`onMounted` 与换卡组 watch 只做 `seedFromStarters()` / `resetWorker()`。这是用户明确要求过的行为，别加回自动计算。
+- `compute()` 返回 `Promise<void>`，靠 `computeWaiters` 在 `settle()`（成功 / 失败）和 `resetWorker()`（任务被掐掉）时 resolve；导出图前 `await compute()` 才拿得到抽滤 pp。**新增任何提前结束求解的路径都要 `flushComputeWaiters()`**，否则导出会永久挂起。
+- `stale` 只看 `handSize / starters / blockers / effects`（watch 里手写 JSON 快照，不是整份 plan）。废件 / 手坑张数存在 `RatePlan.brickCount` / `handtrapCount`（`?: number`，旧档由 `normalizePlan` 补 0），写入走 `deck.patchPlan` 而不是 `mutate()`——**别把它们塞进 stale 判定**，否则手填一个数字就把已算结果标成过期。
+- `clauseChances` 是每个启动组单独调 `openingChance(buildRateModel(deck, [clause], blockers), …)` 的静态解析解（不含抽滤），和 `result.steps` 不是一回事：`steps[0]` 是起手，`steps[k]` 对应第 k 个抽滤效果的新增，导出图的 pp 取的是后者。
+- 底部「废件上手率 / 手坑上手率」共用 `useHandTable()`（超几何）：**条形表是「恰好 k 张」、互不累计**，「至少 1 张」单独放面板右上角。这两个口径用户已经误读过一次（18 张的「恰好 1 张」比 10 张低是正常的），改文案别把「恰好」省掉。
+- 「导出图片」→ `renderRatesPoster()`（纯 canvas，不加载卡图，因此没有跨域污染画布的问题）：顶部卡组名 + 先手 / 后手，之后依次①启动组（按组内卡张数降序）②抽滤组件与 `+X.XXpp` ③废件 ④手坑，③④没填就不画。生成后进预览弹窗（复用 `.overlay.center` / `.poster-modal` / `.poster-preview`），由 `downloadPoster()` / `copyPoster()`（`lib/clipboard.ts`）落地，`closePoster()` 与 `onUnmounted` 负责 revoke objectURL。
+
 ### 全站数据备份（`src/lib/siteData.ts`）
 
 「使用说明」页底部的导出 / 导入。**白名单**：`LOCAL_KEYS`（卡组 v2、手坑、自定义卡、skill 包、暂存、主题、AI 配置）+ IndexedDB `ygo-skill` 的 `replays` 表。
@@ -142,7 +151,7 @@ AI 配置从「对战区」的弹窗**提取成了独立 tab**（路由 `/ai`，
 - `views/CardsView.vue`：检索列表 + 详情抽屉（外链 ygocdb）。
 - `views/DeckView.vue`：卡组构建 / 导入导出 / 竖版长图。
 - `views/DuelView.vue`：真实对局界面（`components/duel/DuelQuestionPanel.vue` 负责选项 / 选卡交互），打完可以「绑定到卡组」变成录像样本；结束弹窗里可以给这局起名（`replayNameInput`，默认「卡组名 · 第 N 回合 · 时间」），导出 .yrp 的文件名也用它。页内的「AI 设置」是 `RouterLink` 到 `/ai`（**会离开当前对局**，按钮 title 里提示先暂存）；AI 未开启时「AI 代打」按钮置灰。
-- `views/RatesView.vue`：起手 / 启动率计算（`lib/rates.ts` + `ratesWorker.ts`）。
+- `views/RatesView.vue`：启动率计算（`lib/rates.ts` + `ratesWorker.ts`）+ 底部废件 / 手坑查询表 + 长图导出（`lib/ratesPoster.ts`，弹窗里下载 / 复制）；细节见上文「启动率」。
 - `views/AiSettingsView.vue`：AI 设置 tab（`/ai`）。总开关 / 协议 / 端点 / 密钥 / 模型 + 参数组（默认即推荐值，可「恢复推荐参数」），自动保存；见上文「AI 设置」。
 - `views/GuideView.vue`：使用说明 tab（`/guide`）。快速上手（卡组 → 录像 → 分析 → skill 包）、功能导航表、AI 开启步骤、数据与备份、常见问题。文案跟着功能改，别让它变成过期教程。
 - `views/SkillsView.vue`：录像列表（导入 / 单份导出 `.yrp` / 展开链图 / 移除）、重新解析、检索图、Skill 包预览 / 导出。单份导出直接写 `loadReplayBinding()` 拿到的原始字节，和当初导入的文件一致。「展开图」把解析结果画成竖版长图（`lib/replayPoster.ts`，canvas + 同源卡图），弹窗里可下载 / 复制。「检索图」汇总当前卡组**全部录像**的 `flows`，画成卡组卡片围成一圈、连线按区域转移类型上色的圆图（`lib/flowPoster.ts`）；缺 `flows` 的旧缓存会在点按钮时按需重放（`loadReplayFlows()`）。**每份录像行也有「检索图」**，同一套绘制只看这一条展开的关系，弹窗标题区分「卡组维度 / 单份录像」，导出文件名用卡组名或录像名。图里**只画参与过连线的卡**（没连线的卡会把环撑大），环半径随节点数伸缩，被省略的张数写在页脚。弹窗里是一张**活的 canvas**（`prepareFlowPoster()` 返回 `FlowPosterScene`，卡图只预加载一次）：点某张卡就 `render(卡名)` 只留这张卡与有直接连线的卡、其余压暗，再点同一张（或点空白）恢复全图；`cardAt()` 用归一化坐标做命中测试，所以 CSS 缩放后点击依然准。中心**不画统计徽章**（会盖住穿心的连线），份数 / 连线数 / 参与张数只在标题下方那行副标题里。「手坑报告」（`lib/handtrapReport.ts`）分两个**互不混合**的入口：右上角按钮是卡组维度（全部录像按手坑汇总「命中步数 / 占总步数 / 命中录像数 / 最早第几步 / 被自排连锁规避次数」）；单份维度在每份录像的「手坑报告」按钮上（这条展开共几步、哪几步会吃手坑、每个手坑占本展开的比例）。同一份录像里同一手坑命中同一步只算一步；`row.hitSteps` 是**跨手坑去重**的「不安全步数」（同一步可能同时吃两种手坑）。规则升过版的录像（`analysisVersion` 对不上）两处都不计入，卡组维度顶部会写「另有 N 份已过期未计入」；两个弹窗都能导出各自的 Markdown。单份报告还有第二块「抽卡型手坑」（`lib/duel/drawHandtraps.ts`，只存在于单份维度）：它与上面的打断型手坑分开统计，按回合给出「若对手在这一刻丢增殖的 G / 欢聚友伴，这回合还能抽几张」。数据只看事件流里的 `move`——我方把怪兽放进怪兽区且 `reason` 含 `SUMMON` / `SPSUMMON`（被无效的特召不产生这条移动），来源区域决定算哪张欢聚友伴：手卡 → 噗露莉娅（含通常召唤）、卡组 / 额外 → 浮华洛丝、墓地 / 除外 → 喵露丝；增殖的 G 算所有特召。抽数直接取该回合这类动作的次数（按上限算，不扣首次）。三张欢聚友伴同一回合只能发一张，所以分别列出来而不是相加。录像行还有「改名」（`renameReplayBinding()`，回车保存 / Esc 取消 / 失焦提交）。报告**不统计尼比鲁与锁鸟**（`REPORT_SKIP`）：前者是「累计第 5 次召唤」的固定计数，后者只在第一次检索后生效，报出来的步数基本等于召唤 / 检索次数，读不出检索链的信息；判定本身不变，录像列表与 skill 包照旧包含这两个手坑点。Skill 包面板的「AI 生成 skill 包」需要 AI 开关打开（否则置灰），生成结果按卡组落盘、不会因为切页消失；每个文件可编辑保存，也可新增，再次点生成才覆盖。

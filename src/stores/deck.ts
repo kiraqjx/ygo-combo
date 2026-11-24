@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
-import type { CardData, DeckEntry } from '@/types'
+import type { CardData, DeckEntry, FrameType } from '@/types'
 import { uid } from '@/lib/infer'
 import { blankPlan, clonePlan, normalizePlan, type RateClause, type RatePlan } from '@/lib/rates'
 
@@ -346,6 +346,61 @@ export const useDeckStore = defineStore('deck', () => {
     clear('side')
   }
 
+  /* ---- 排序 ---- */
+
+  /** 主 / 副卡组：怪兽 → 魔法 → 陷阱 */
+  const FRAME_RANK: Record<FrameType, number> = { monster: 0, spell: 1, trap: 2 }
+  /** 额外卡组：融合 → 同调 → 超量 → 连接 */
+  const EXTRA_RANK = ['融合', '同调', '超量', '连接']
+  /** 卡库查不到卡种时排到末尾（同组内仍按卡号） */
+  const UNKNOWN_RANK = 9
+
+  function sortRank(section: DeckSection, card: CardData | undefined): number {
+    if (!card) return UNKNOWN_RANK
+    if (section !== 'extra') return FRAME_RANK[card.frame] ?? UNKNOWN_RANK
+    const index = EXTRA_RANK.findIndex((kind) => card.kinds.includes(kind))
+    return index < 0 ? UNKNOWN_RANK : index
+  }
+
+  /**
+   * 一键排序：主卡组 / 副卡组按怪兽 → 魔法 → 陷阱，额外卡组按融合 → 同调 → 超量 → 连接，
+   * 同种类内按卡号从小到大。卡种要问卡库，所以由调用方注入 resolve。
+   * 一条卡种都查不到（卡库未就绪）时不动现有顺序，避免被排成纯卡号序。
+   */
+  function sortAll(resolve: (id: number) => CardData | undefined): DeckActionResult {
+    const target = current.value
+    if (!target) return { ok: false, message: '请先新建一套卡组' }
+
+    const plans: { list: DeckEntry[]; next: DeckEntry[] }[] = []
+    let known = 0
+    for (const section of DECK_SECTIONS) {
+      const list = target[section.id]
+      if (list.length < 2) continue
+      const ranked = list.map((entry) => {
+        const rank = sortRank(section.id, resolve(entry.id))
+        if (rank !== UNKNOWN_RANK) known += 1
+        return { entry, rank }
+      })
+      const next = ranked
+        .sort((a, b) => a.rank - b.rank || a.entry.id - b.entry.id)
+        .map((item) => item.entry)
+      plans.push({ list, next })
+    }
+
+    if (!known) return { ok: false, message: '卡库还没就绪，暂时无法按种类排序' }
+
+    let changed = false
+    for (const { list, next } of plans) {
+      if (next.every((entry, index) => entry === list[index])) continue
+      list.splice(0, list.length, ...next)
+      changed = true
+    }
+
+    if (!changed) return { ok: true, message: '已经是按种类和卡号排好的顺序' }
+    touch()
+    return { ok: true, message: '已排序：怪兽 → 魔法 → 陷阱；额外：融合 → 同调 → 超量 → 连接' }
+  }
+
   /**
    * 卡库就绪 / 补录自定义卡之后，用卡库里的真实数据修一遍卡组与启动率配置：
    * - 异画编号（本体密码 + 1..9）折回本体密码；
@@ -553,6 +608,7 @@ export const useDeckStore = defineStore('deck', () => {
     remove,
     clear,
     clearAll,
+    sortAll,
     resolveNames,
     replaceAll,
     addStarter,

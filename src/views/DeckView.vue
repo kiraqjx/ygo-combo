@@ -502,6 +502,12 @@ function clearSection(section: DeckSection) {
   toast(`已清空${DECK_SECTIONS.find((item) => item.id === section)?.label}`)
 }
 
+/** 一键排序：主卡组按怪兽 → 魔法 → 陷阱，额外卡组按融合 → 同调 → 超量 → 连接 */
+function sortDeck() {
+  const outcome = deck.sortAll((id) => cards.getCard(id))
+  toast(outcome.message, !outcome.ok)
+}
+
 /* ---------------- 卡组管理 ---------------- */
 
 function selectDeck(event: Event) {
@@ -679,6 +685,14 @@ function refreshLibrary() {
           style="display: none"
           @change="onYdkFile"
         />
+        <button
+          class="btn sm ghost"
+          title="主卡组：怪兽 → 魔法 → 陷阱；额外卡组：融合 → 同调 → 超量 → 连接；同种类按卡号排序"
+          :disabled="!deck.total"
+          @click="sortDeck"
+        >
+          一键排序
+        </button>
         <button class="btn sm ghost" @click="oddsModal = true">上手概率</button>
         <button class="btn sm ghost" :disabled="!deck.counts.main" @click="openSmallWorld">小世界现象</button>
         <button class="btn sm ghost" :disabled="!deck.counts.main" @click="openHand">模拟起手</button>

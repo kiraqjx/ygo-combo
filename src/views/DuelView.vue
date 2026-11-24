@@ -11,6 +11,7 @@ import { isAttackPosition, isFaceDown, positionLabel, zoneLabel } from '@/lib/du
 import { autoRespond } from '@/lib/duel/auto'
 import { buildSlotHints, placeOptions, selectRange, slotKey, type DuelCommand, type SlotHint } from '@/lib/duel/interaction'
 import {
+  deckFingerprint,
   loadCheckpoints,
   removeCheckpoint,
   saveCheckpoint,
@@ -52,7 +53,8 @@ const activeDeck = ref<DuelDeck>({ main: [], extra: [] })
 
 /** 全屏沉浸模式：开打之后场地铺满视口，HUD 提供重开 / 暂存 / 结束 */
 const immersive = ref(false)
-const checkpoints = ref<DuelCheckpoint[]>(loadCheckpoints())
+/** 当前卡组自己的暂存，卡组 / 卡表变化时由 refreshCheckpoints() 重算 */
+const checkpoints = ref<DuelCheckpoint[]>([])
 const checkpointOpen = ref(false)
 /** 结束对局的确认（顺便问要不要导出 .yrp） */
 const endConfirm = ref(false)
@@ -913,6 +915,23 @@ async function startDuel(restore?: DuelCheckpoint) {
 /* 暂存：记住开局参数 + 我方每一步决定，恢复时重开并自动走到存档点      */
 /* ---------------------------------------------------------------- */
 
+/** 当前卡组的卡表指纹：卡号 + 张数变了，旧暂存就对不上了 */
+const currentDeckFingerprint = computed(() => deckFingerprint(currentDeck.value))
+
+/**
+ * 暂存按卡组隔离：只列当前卡组的档，且卡表变过（指纹对不上）的会被清掉，
+ * 因为回放是拿卡组重开一局，卡组换了必然走到别的局面。
+ */
+function refreshCheckpoints() {
+  checkpoints.value = loadCheckpoints({
+    deckId: deckStore.currentDeckId ?? '',
+    fingerprint: currentDeckFingerprint.value,
+  })
+}
+
+refreshCheckpoints()
+watch([() => deckStore.currentDeckId, currentDeckFingerprint], refreshCheckpoints)
+
 function saveCurrentCheckpoint() {
   const current = session.value
   const view = state.value
@@ -937,6 +956,7 @@ function saveCurrentCheckpoint() {
     label: `${deckName} · 第 ${view.turn} 回合`,
     deckId: deckStore.currentDeckId ?? '',
     deckName,
+    deckFingerprint: deckFingerprint(activeDeck.value),
     seed,
     playerDeck: activeDeck.value,
     handSize: handSize.value,
@@ -946,12 +966,14 @@ function saveCurrentCheckpoint() {
     phase: view.phase,
     createdAt: Date.now(),
   }
-  checkpoints.value = saveCheckpoint(checkpoint)
+  saveCheckpoint(checkpoint)
+  refreshCheckpoints()
   showToast(`已暂存，共 ${steps.length} 步操作`)
 }
 
 function deleteCheckpoint(id: string) {
-  checkpoints.value = removeCheckpoint(id)
+  removeCheckpoint(id)
+  refreshCheckpoints()
 }
 
 /** 结束前给这局起个名字：绑定到卡组后就是录像列表里的展示名 */
@@ -2054,10 +2076,10 @@ onBeforeUnmount(() => {
         </div>
         <p class="end-text">
           暂存记录的是开局参数和我方做过的每一步决定。载入后会重开一局并自动操作到存档点，
-          然后交还给你继续打。卡组内容改变过的话，回放可能对不上。
+          然后交还给你继续打。暂存按卡组独立保存，卡表（卡号 / 张数）改动后旧暂存会自动作废。
         </p>
         <div v-if="!checkpoints.length" class="inline-note" style="margin-top: 12px">
-          还没有暂存。对局中点上方的「暂存」就会存到当前局面。
+          当前卡组还没有暂存。对局中点上方的「暂存」就会存到当前局面。
         </div>
         <div v-else class="cp-list">
           <div v-for="item in checkpoints" :key="item.id" class="cp-item">

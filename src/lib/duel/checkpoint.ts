@@ -7,6 +7,9 @@ import type { DuelDeck } from './types'
  * 内核是确定性的：同种子 + 同卡组 + 同响应序列，必然走到同一个局面。
  * 所以暂存不需要保存整个场地，只要记住开局参数（种子 / 卡组 / 起手）
  * 和我方做过的每一次决定，恢复时重开一局把这些决定再喂一遍即可。
+ *
+ * 暂存按卡组隔离（`deckId`），并且记住当时的卡表指纹（`deckFingerprint`）：
+ * 卡组构成一变，旧档回放必然走到别的局面，读到时就作废。
  */
 export interface DuelCheckpoint {
   id: string
@@ -14,6 +17,8 @@ export interface DuelCheckpoint {
   label: string
   deckId: string
   deckName: string
+  /** 开局时卡组的指纹（见 `deckFingerprint`），和当前卡组对不上就作废 */
+  deckFingerprint: string
   /** 4 × 64 位种子，BigInt 不能直接进 JSON，存十六进制字符串 */
   seed: [string, string, string, string]
   playerDeck: DuelDeck
@@ -28,7 +33,24 @@ export interface DuelCheckpoint {
 }
 
 const STORAGE_KEY = 'ygo-duel-checkpoints'
+/** 每套卡组保留的暂存条数 */
 const LIMIT = 20
+
+/**
+ * 卡组指纹：只看卡号与张数，与录入顺序无关。
+ * 卡组名、启动率配置不算「卡组变化」——改个名字不该把暂存全废掉。
+ */
+export function deckFingerprint(deck: DuelDeck): string {
+  const encode = (codes: number[]) => {
+    const counts = new Map<number, number>()
+    for (const code of codes) counts.set(code, (counts.get(code) || 0) + 1)
+    return Array.from(counts.entries())
+      .sort((a, b) => a[0] - b[0])
+      .map(([code, count]) => `${code}x${count}`)
+      .join(',')
+  }
+  return `${encode(deck.main)}|${encode(deck.extra)}`
+}
 
 function isSeed(value: unknown): value is [string, string, string, string] {
   return Array.isArray(value) && value.length === 4 && value.every((item) => typeof item === 'string')
@@ -52,6 +74,11 @@ function normalize(raw: unknown): DuelCheckpoint | null {
     label: typeof item.label === 'string' ? item.label : '未命名暂存',
     deckId: typeof item.deckId === 'string' ? item.deckId : '',
     deckName: typeof item.deckName === 'string' ? item.deckName : '未知卡组',
+    // 老版本没有这个字段：按存档里那套牌现算，一样能判失效
+    deckFingerprint:
+      typeof item.deckFingerprint === 'string' && item.deckFingerprint
+        ? item.deckFingerprint
+        : deckFingerprint(item.playerDeck),
     handSize: Number(item.handSize) || 5,
     openingHand: Array.isArray(item.openingHand) ? item.openingHand : [],
     turn: Number(item.turn) || 1,
@@ -60,7 +87,8 @@ function normalize(raw: unknown): DuelCheckpoint | null {
   }
 }
 
-export function loadCheckpoints(): DuelCheckpoint[] {
+/** 全部卡组的所有暂存（不清洗有效性，只做去重与排序） */
+function readAll(): DuelCheckpoint[] {
   try {
     const text = localStorage.getItem(STORAGE_KEY)
     if (!text) return []
@@ -83,6 +111,27 @@ export function loadCheckpoints(): DuelCheckpoint[] {
   }
 }
 
+export interface CheckpointFilter {
+  deckId: string
+  /** 当前卡组的指纹 */
+  fingerprint: string
+}
+
+/**
+ * 读取暂存。带 filter 时只返回当前卡组、且卡表没变过的档；
+ * 同卡组但卡表变了的会顺手从存储里删掉（回放必然对不上，留着只会误导）。
+ * 其他卡组的暂存原样保留，切回去还能用。
+ */
+export function loadCheckpoints(filter?: CheckpointFilter): DuelCheckpoint[] {
+  const all = readAll()
+  if (!filter) return all
+  const valid = (item: DuelCheckpoint) =>
+    item.deckId === filter.deckId && item.deckFingerprint === filter.fingerprint
+  const stale = all.filter((item) => item.deckId === filter.deckId && !valid(item))
+  if (stale.length) persist(all.filter((item) => !stale.includes(item)))
+  return all.filter(valid)
+}
+
 /**
  * 宣言类响应（ANNOUNCE_RACE）里是 bigint，直接 JSON.stringify 会抛错，
  * 结果是整条存档静默丢失。这里统一转成十进制字符串，读取时再还原。
@@ -100,9 +149,7 @@ function persist(list: DuelCheckpoint[]) {
   try {
     localStorage.setItem(
       STORAGE_KEY,
-      JSON.stringify(list.slice(0, LIMIT), (_key, value) =>
-        typeof value === 'bigint' ? value.toString() : value,
-      ),
+      JSON.stringify(list, (_key, value) => (typeof value === 'bigint' ? value.toString() : value)),
     )
     return true
   } catch (error) {
@@ -112,15 +159,23 @@ function persist(list: DuelCheckpoint[]) {
   }
 }
 
+/** 存一条，返回这套卡组剩下的暂存（其他卡组的档不受影响） */
 export function saveCheckpoint(checkpoint: DuelCheckpoint): DuelCheckpoint[] {
-  const rest = loadCheckpoints().filter((item) => item.id !== checkpoint.id)
-  const next = [checkpoint, ...rest].slice(0, LIMIT)
-  persist(next)
-  return next
+  const all = readAll()
+  // 同一局（同卡组 + 同种子）重存就覆盖；卡表变了的同卡组旧档一并清掉
+  const sameDeck = all.filter(
+    (item) =>
+      item.deckId === checkpoint.deckId &&
+      item.deckFingerprint === checkpoint.deckFingerprint &&
+      item.id !== checkpoint.id,
+  )
+  const kept = [checkpoint, ...sameDeck].slice(0, LIMIT)
+  persist([...kept, ...all.filter((item) => item.deckId !== checkpoint.deckId)])
+  return kept
 }
 
 export function removeCheckpoint(id: string): DuelCheckpoint[] {
-  const next = loadCheckpoints().filter((item) => item.id !== id)
+  const next = readAll().filter((item) => item.id !== id)
   persist(next)
   return next
 }

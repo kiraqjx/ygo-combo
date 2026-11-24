@@ -73,12 +73,33 @@ export async function idbDel(key: string): Promise<void> {
   }
 }
 
-export const cardImageUrl = (id: number) => `https://cdn.233.momobako.com/ygopro/pics/${id}.jpg`
+/** 决斗资源前缀（与 src/lib/duel/scripts.ts 的 DUEL_ASSET_BASE 同一份约定） */
+const DUEL_ASSET_BASE = `${(import.meta.env.VITE_DUEL_ASSET_BASE || '/duel-assets/').replace(/\/+$/, '')}/`
+
+/**
+ * 超先行服的临时编号卡（1013xxxxx / 1002xxxxx）。
+ *
+ * 这些号正式服卡库没有，卡图 CDN 上也没有；卡图与卡数据由
+ * `npm run assets:duel -- --superpre` 落到 duel-assets/ 下（同源，导出长图能画进 canvas）。
+ * 登记过的号一律走本地资源，不然会先请求 momobako 404、再请求 ygoprodeck 404。
+ */
+const superPreIds = new Set<number>()
+const superPrePicUrl = (id: number) => `${DUEL_ASSET_BASE}pics/superpre/${id}.jpg`
+
+export function registerSuperPreIds(ids: Iterable<number>): void {
+  for (const id of ids) superPreIds.add(id)
+}
+
+export const cardImageUrl = (id: number) =>
+  superPreIds.has(id)
+    ? superPrePicUrl(id)
+    : `https://cdn.233.momobako.com/ygopro/pics/${id}.jpg`
 /** momobako 缺图时的备用图源（新卡 / 先行卡常见） */
-export const cardImageFallback = (id: number) => `https://images.ygoprodeck.com/images/cards/${id}.jpg`
+export const cardImageFallback = (id: number) =>
+  superPreIds.has(id) ? CARD_PLACEHOLDER : `https://images.ygoprodeck.com/images/cards/${id}.jpg`
 /** 备用图源的小图，列表缩略图用，省流量 */
 export const cardImageFallbackSmall = (id: number) =>
-  `https://images.ygoprodeck.com/images/cards_small/${id}.jpg`
+  superPreIds.has(id) ? CARD_PLACEHOLDER : `https://images.ygoprodeck.com/images/cards_small/${id}.jpg`
 
 /**
  * 卡图的同源地址：dev / preview 由 vite 代理到 momobako，
@@ -86,7 +107,8 @@ export const cardImageFallbackSmall = (id: number) =>
  * 只有同源才允许把卡图画进 canvas（导出 GIF）。
  */
 export const CARD_IMG_BASE = import.meta.env.VITE_CARD_IMG_BASE || '/pics/'
-export const cardImageProxyUrl = (id: number) => `${CARD_IMG_BASE}${id}.jpg`
+export const cardImageProxyUrl = (id: number) =>
+  superPreIds.has(id) ? superPrePicUrl(id) : `${CARD_IMG_BASE}${id}.jpg`
 
 /** 里侧表示用的标准卡背：ygopro 的 pics 目录里 id 0 就是卡背图 */
 export const cardBackImageUrl = `${CARD_IMG_BASE}0.jpg`
@@ -275,6 +297,34 @@ async function downloadZip(onProgress: (loaded: number, total: number) => void):
   return out
 }
 
+/**
+ * 超先行服（MyCard 超先行）的临时编号卡。
+ *
+ * 正式服卡库（ygocdb）没有这些号，所以单独由 `assets:duel --superpre` 生成一份
+ * `duel-assets/superpre-cards.json`（ygocdb 同格式），这里解析成 CardData 追加进卡库。
+ * 拿不到就返回空数组：没有超先行资源时整个卡库照常工作。
+ */
+export async function loadSuperPreCards(): Promise<CardData[]> {
+  try {
+    const res = await fetch(`${DUEL_ASSET_BASE}superpre-cards.json`, { cache: 'no-cache' })
+    if (!res.ok) return []
+    const json = (await res.json()) as { cards?: RawCard[] }
+    const cards = (json.cards || []).filter((card) => card && card.id).map(normalizeCard)
+    registerSuperPreIds(cards.map((card) => card.id))
+    return cards
+  } catch {
+    return []
+  }
+}
+
+/** 主卡库 + 超先行卡（同号以主卡库为准） */
+async function withSuperPre(cards: CardData[]): Promise<CardData[]> {
+  const extra = await loadSuperPreCards()
+  if (!extra.length) return cards
+  const known = new Set(cards.map((card) => card.id))
+  return [...cards, ...extra.filter((card) => !known.has(card.id))]
+}
+
 export async function loadCardDatabase(onProgress?: (p: LoadProgress) => void): Promise<CardData[]> {
   const report = (p: LoadProgress) => onProgress?.(p)
   const cached = await idbGet<string>(CACHE_KEY)
@@ -283,8 +333,15 @@ export async function loadCardDatabase(onProgress?: (p: LoadProgress) => void): 
       report({ phase: 'parse', loaded: 0, total: 0, message: '读取本地卡库…' })
       const cards = JSON.parse(cached) as CardData[]
       if (Array.isArray(cards) && cards.length > 1000) {
-        report({ phase: 'ready', loaded: cards.length, total: cards.length, message: `本地卡库 ${cards.length} 张` })
-        return cards
+        // 缓存里只有正式服卡库，超先行卡每次从 duel-assets 补（几十 KB，不值得进 IDB）
+        const merged = await withSuperPre(cards)
+        report({
+          phase: 'ready',
+          loaded: merged.length,
+          total: merged.length,
+          message: `本地卡库 ${merged.length} 张`,
+        })
+        return merged
       }
     } catch {
       await idbDel(CACHE_KEY)
@@ -308,8 +365,14 @@ export async function loadCardDatabase(onProgress?: (p: LoadProgress) => void): 
     .map(normalizeCard)
   await idbSet(CACHE_KEY, JSON.stringify(cards))
   await idbSet(META_KEY, { updatedAt: Date.now(), count: cards.length })
-  report({ phase: 'ready', loaded: cards.length, total: cards.length, message: `卡库就绪 · ${cards.length} 张` })
-  return cards
+  const merged = await withSuperPre(cards)
+  report({
+    phase: 'ready',
+    loaded: merged.length,
+    total: merged.length,
+    message: `卡库就绪 · ${merged.length} 张`,
+  })
+  return merged
 }
 
 export async function getCardCacheMeta(): Promise<{ updatedAt: number; count: number } | null> {

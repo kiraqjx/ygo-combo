@@ -86,6 +86,11 @@ const DUEL_ASSET_TYPES: Record<string, string> = {
   '.lua': 'text/plain; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
   '.wasm': 'application/wasm',
+  // 超先行卡卡图（pics/superpre/*.jpg）也走这个中间件
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.png': 'image/png',
+  '.webp': 'image/webp',
 }
 
 function duelAssetMiddleware() {

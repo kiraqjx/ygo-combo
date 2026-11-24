@@ -7,7 +7,7 @@
 - `npm run typecheck` — `vue-tsc --noEmit`，本仓库唯一可用的静态检查；提交前跑这个。
 - `npm run build` — `vue-tsc -b && vite build`，产物在 `dist/`；纯静态站点，History 路由需服务端回退到 `index.html`。
 - `npm run preview` — 预览构建产物（同样带 `/pics` 代理）。
-- `npm run assets:duel` — 跑 `scripts/fetch-duel-assets.mjs` 拉取对局资源到 `duel-assets/`（ocgcore 官方 Lua 脚本、卡名 / 效果描述）。仓库里已经有一份，除非内核升级导致脚本对不上才需要重跑。
+- `npm run assets:duel` — 跑 `scripts/fetch-duel-assets.mjs` 拉取对局资源到 `duel-assets/`（ocgcore 官方 Lua 脚本、MyCard 先行服脚本、卡名 / 效果描述）。仓库里已经有一份，除非内核升级或要跟上先行卡才需要重跑；**重跑默认复用 `.cache/duel` 里的上游包**，要拉最新的加 `-- --refresh`（否则会以为更新了、其实还是旧脚本）。先行卡（MyCard 客户端已能打、KONAMI 还没发售）的脚本只从 `mycard/ygopro-scripts` 挑「不依赖 MyCard 私有辅助函数」的那些，其余跳过（见 README「数据来源」）。上游都还没写脚本的新卡，可把 `c<卡号>.lua` 放进 `duel-assets/scripts/local/`（优先于所有内置目录，`--refresh` 也不会删），或用 `--edopro=<任意本地目录>` / `--scripts-from=<tar.gz 或 zip 脚本包>` 让脚本自动扫描导入（只补上游没有的卡号、不覆盖 local 已有文件、仍按 aux 引用筛兼容性）。前者适合本地 EDOPro 安装目录，也适合 MC 超先行补丁解压出来的目录。`--superpre` 另外整批接超先行服（与 mycard.world 的 `#/superpre` 页面同一套接口）：能对上正式卡号的脚本改名进 `local/`，还没有正式密码的新卡按临时编号（`1013xxxxx` / `1002xxxxx`）进 `scripts/superpre/`，卡数据（包里的 `test-release.cdb`）合并进 `cards.json`，卡图落到 `pics/superpre/`，前端卡库条目生成 `duel-assets/superpre-cards.json`。
 - 仓库没有配置 lint 与测试框架（无 Vitest / ESLint 脚本），也没有单测可跑。新增测试前需先引入 runner 并补充 npm script。
 
 ## 架构概览
@@ -30,7 +30,7 @@ combo 工坊（`Combo` / `ComboLine` / `Timing` / `CardMove` 那套手工编排�
 
 `loadCardDatabase()` 下载 ygocdb 的 `cards.zip` → fflate 解压 → `normalizeCard()` 归一化成 `CardData`（含小写检索串 `blob`、`frame`、`kinds`）→ JSON 缓存进 IndexedDB（`ygo-infer` DB）。卡库不可用时 `remoteSearch()` 回退到 ygocdb 在线接口。`searchCards()` / `collectFacets()` 在内存里做筛选与聚合，`App.vue` 挂载时触发 `cardStore.init()`。
 
-卡库只有正式服数据，先行服 / 新卡搜不到，因此 `lib/customCards.ts` 支持手动录入（只写卡名、种类、可选卡号与效果文本），存 localStorage，并由 `stores/cards.ts` 与下载卡库合并成 `store.cards`（`library` 是下载库，`custom` 是本地库），检索、卡组、启动率都走合并后的列表。自定义卡没有卡图，`App.vue` 用捕获阶段的全局 `error` 监听把失败的 `<img>` 换成 `CARD_PLACEHOLDER`。
+卡库只有正式服数据，因此有两条补充路径：一是 `loadCardDatabase()` 末尾把 `duel-assets/superpre-cards.json`（超先行临时编号卡，`assets:duel --superpre` 生成）解析成 `CardData` 合并进 `library`（同号以主卡库为准，`registerSuperPreIds()` 登记的号卡图改走同源 `duel-assets/pics/superpre/`）；二是 `lib/customCards.ts` 手动录入（只写卡名、种类、可选卡号与效果文本），存 localStorage，并由 `stores/cards.ts` 与下载卡库合并成 `store.cards`（`library` 是下载库，`custom` 是本地库），检索、卡组、启动率都走合并后的列表。自定义卡没有卡图，`App.vue` 用捕获阶段的全局 `error` 监听把失败的 `<img>` 换成 `CARD_PLACEHOLDER`。
 
 ### 文本推断（`src/lib/infer.ts`）
 
@@ -38,7 +38,13 @@ combo 工坊（`Combo` / `ComboLine` / `Timing` / `CardMove` 那套手工编排�
 
 ### 真实对局引擎（`src/lib/duel/*`）
 
-用 `ocgcore-wasm`（优先 JSPI 异步版，`!wasm?url` 加载，不支持时退回同步版）真正跑 OCG 规则。`duel-assets/` 是它需要的本地资源：`scripts/official/*.lua`（卡片脚本）、`descriptions.json`、`strings`，由 `session.ts` 通过 `ScriptStore` / `loadDuelStrings()` 喂给内核。
+用 `ocgcore-wasm`（优先 JSPI 异步版，`!wasm?url` 加载，不支持时退回同步版）真正跑 OCG 规则。`duel-assets/` 是它需要的本地资源：`scripts/official/*.lua`（卡片脚本）、`scripts/mycard/*.lua`（先行服脚本）、`scripts/superpre/*.lua`（超先行服临时编号脚本）、`pics/superpre/*.jpg`（超先行卡图）、`descriptions.json`、`strings`，由 `session.ts` 通过 `ScriptStore` / `loadDuelStrings()` 喂给内核。`ScriptStore` 找卡片脚本的顺序是 `local → superpre → official → pre-release → mycard → unofficial → pre-errata`，都没有才用空脚本兜底并记进 `missingCodes`（界面黄条提示「效果不会生效」）。`mycard/`、`superpre/`、`mycard-compat.lua` 都由 `assets:duel` 生成。
+
+**公共脚本加载顺序由 `ScriptStore.helpers()` 写死**，`helpers.json` 只提供清单：`constant → utility → 其余（proc_* 等）→ SUPER_PRE_HELPERS → mycard-compat`。`SUPER_PRE_HELPERS = [mycard-snapshot, mycard-utility, mycard-restore, mycard-procedure]` 是超先行 / 先行服的兼容层：MyCard 的 `utility.lua` 第一行是 `Auxiliary={}`，直接加载会把 EDOPro 的 aux 全清空（实测 20 张官方卡当场注册失败），所以先快照、再加载 MyCard 的 utility、然后逐键还原 EDOPro 的实现、最后补 MyCard 的 `procedure.lua`（提供 `aux.AddXyzProcedure` / `aux.AddSynchroProcedure` 等）。**这个顺序不能调**，改了就静默退化。`mycard-compat.lua` 必须最后（覆盖 `GetID`、补 MyCard 独有常量，早于 utility 会拿到 nil）。
+
+`mycard-compat.lua` 还补了 10 个 **MyCard 内核内置、Lua 侧没有**的 `Card.*` 判定：`Card.IsFusionType` / `IsFusionAttribute` / `IsFusionRace` / `IsFusionCode` / `IsFusionSetCard` / `IsLinkType` / `IsLinkAttribute` / `IsLinkRace` / `IsLinkCode` / `IsLinkSetCard`。它们是**懒崩**的：初始化不报错，等求值 Link / 融合召唤条件时才 `attempt to call a nil value`，界面表现就是「卡能加进卡组、但点了不能召唤」（22011594 龙魔导降灵师踩过）。新增超先行脚本如果又出现「出不了场」，先查脚本里有没有别的 MyCard 专有 API。
+
+`ScriptStore` 请求脚本时会带 `?v=<manifest.builtAt>`：不带版本号时浏览器按 `cache-control` 能缓存一天，重跑 `assets:duel` 补了脚本/改了垫片，页面却还在跑旧文件（表现为「明明补了还是不行」）。
 
 - `session.ts`（`DuelSession`）—— 对象生命周期的唯一入口：`start()` / `waitForEnd()` / `snapshot()`；内部循环 `process()` → 处理消息 → `takeQuestion()` → 取答复。三种答复来源：界面（`waitAnswer`）、沙包 AI（`autoRespond`）、录像回放（`rawQueue` 直接把 `.yrp` 里的响应字节按序喂回）。同时产出三样东西：`state`（界面状态）、`logs`（人类可读日志）、**`signals`（结构化事件流）**。
 - `signals` 是录像手坑分析的**唯一数据源**。`DuelSignalKind` 见 `types.ts`：`summon` / `spsummon` / `flip`（召唤宣言）、`summoned` / `spsummoned` / `flipsummoned`（内核确认成功，被无效就没有这条）、`set`、`position`（表示形式变化）、`chain`（发动）、`solving` / `solved` / `negated`（连锁结算）、`move`（带 from/to 区域位与 reason 位）、`draw`、**`prompt`（SELECT_CHAIN 提问，表示此刻轮到谁决定要不要连锁）**。新增 kind 时要同步检查 `replayHandtraps.ts` 的 switch。

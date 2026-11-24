@@ -115,7 +115,8 @@ npm run preview
 对局内核需要的 Lua 脚本与卡名描述已经在 `duel-assets/` 里；内核升级导致脚本对不上时可以重新拉取：
 
 ```bash
-npm run assets:duel
+npm run assets:duel              # 复用 .cache 里已经下过的上游包
+npm run assets:duel -- --refresh # 忽略缓存，重新下载上游（想跟上刚出的新卡用这个）
 ```
 
 纯静态站点。若部署到 Nginx 等服务器，请为 History 路由配置回退到 `index.html`：
@@ -151,7 +152,26 @@ location /api/anthropic/ {
 - 卡牌数据：`https://ygocdb.com/api/v0/cards.zip`（中文卡库，约 2.4MB 压缩包）。首次打开时下载、解压并归一化，随后缓存到 IndexedDB，之后离线可用。
 - 卡图：`https://cdn.233.momobako.com/ygopro/pics/{id}.jpg`，失败时回退 YGOPRODeck 图源。
 - 卡库不可用时会自动退回 ygocdb 在线检索接口。
-- 对局脚本 / 描述：`duel-assets/`（`npm run assets:duel` 从 ocgcore 官方脚本与 ygopro 数据库拉取）。
+- 对局脚本 / 描述：`duel-assets/`（`npm run assets:duel` 从 ocgcore 官方脚本、MyCard 先行服脚本与 ygopro 数据库拉取）。
+- 先行卡：MyCard 客户端已经能打、KONAMI 还没正式发售的卡，CardScripts 里没有脚本，`assets:duel` 会从 `mycard/ygopro-scripts` 补一份到 `duel-assets/scripts/mycard/`。
+- 这些脚本会用 `aux.AddXyzProcedure`、`aux.SelectFromOptions` 这类 EDOPro 公共脚本里没有的 MyCard 私有辅助函数。以前这类脚本只能整张跳过（硬塞进来会让卡注册失败、比没脚本更糟），现在补了一层兼容层：把 MyCard 的 `utility.lua` / `procedure.lua` 抄进来，并在两者之间插「快照 → 还原」脚本，保证 EDOPro 原有实现不被覆盖（MyCard 的 `utility.lua` 第一行是 `Auxiliary={}`，会清空整表）。顺序写死在 `src/lib/duel/scripts.ts` 的 `SUPER_PRE_HELPERS` 里，不要调整。
+- 除了 `aux.*`，MyCard 还在**内核里内置**了一批 EDOPro 没有的 `Card.IsFusionType` / `Card.IsLinkType` / `Card.IsLinkAttribute` 这类判定（109 个脚本在用，公共脚本里根本没有定义）。这类缺失最阴的地方是**初始化不报错**：`aux.FilterBoolFunction` 只是把它包起来，等玩家真的去 Link / 融合召唤、求值召唤条件时才 `attempt to call a nil value`，表现就是「这张卡点了没反应、不能召唤」。`mycard-compat.lua` 里按 EDOPro 的基础判定补了这 10 个方法，新增超先行脚本时如果又出现「能加进卡组但出不了场」，先查脚本里有没有别的 MyCard 专有 API。
+- 超先行服（`npm run assets:duel -- --superpre`）：数据源与 mycard.world 的 `#/superpre` 页面一致（`data/latest-tag.txt` 给出补丁包地址、`data/test-release-v2.json` 是卡表）。做两件事：
+  1. 站内卡库能对上正式卡号的卡：脚本改名成 `c<正式卡号>.lua` 写进 `scripts/local/`；
+  2. 还没定正式密码的新卡：沿用临时编号（`1013xxxxx` / `1002xxxxx`），脚本进 `scripts/superpre/`，卡数据（包里的 `test-release.cdb`）合并进 `cards.json`，卡图落到 `duel-assets/pics/superpre/`，前端卡库条目生成 `superpre-cards.json`（打开卡库时自动合并，搜索 / 编卡组 / 对战都能直接用，卡图走同源 `duel-assets`）。
+- 刚公布、上游还没写脚本的卡（比如新卡情报阶段的 1307 卡）：把 `c<卡号>.lua` 放进 `duel-assets/scripts/local/`，`ScriptStore` 会优先读这一层，`assets:duel` 也不会删它。注意脚本要按 EDOPro 的公共脚本 API 写（`aux.Xxx` 用 EDOPro 的实现），否则初始化阶段会报错。
+- 这种脚本可以自动导入，两个参数（可重复、可同时用）：
+
+```bash
+# 递归扫描任意本地目录（EDOPro 安装目录、MC 超先行补丁解压目录都行），
+# 把上游还没收录的 c<卡号>.lua 补进 local/
+npm run assets:duel -- --edopro="/path/to/EDOPro"
+
+# 从任意脚本包补（tar.gz / zip 都认，MC 与 YGOMobile 的先行卡补丁是 zip）
+npm run assets:duel -- --scripts-from="https://example.com/scripts.zip"
+```
+
+  导入规则：上游已收录的卡号跳过；`local/` 里已有的文件不覆盖（自己手改过的不受影响）；仍按 `aux` 引用筛一遍，MyCard 私有辅助函数写的脚本会被跳过。注意这两个参数只解决「脚本已经存在」的情况——CardScripts 本身没有这张卡时，用 `--edopro` 指向官方安装目录也读不出来。
 - 正式服没收录的新卡 / 先行卡可以手动录入（只写卡名、种类、卡号与效果文本），与下载卡库合并使用。
 
 ## 目录结构

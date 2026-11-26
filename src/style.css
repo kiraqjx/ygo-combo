@@ -3957,8 +3957,19 @@ hr,
   padding: 0;
   border: 0;
   background: transparent;
-  cursor: pointer;
+  cursor: grab;
   line-height: 0;
+  -webkit-user-drag: element;
+  transition: opacity 0.16s ease;
+}
+
+.deck-card:active {
+  cursor: grabbing;
+}
+
+/* 拖动中的卡片淡出，剩下的卡片保持原位示意可以落进来 */
+.deck-card.is-dragging {
+  opacity: 0.35;
 }
 
 .deck-card img {
@@ -3970,6 +3981,24 @@ hr,
   border: 1px solid var(--line);
   background: var(--panel-2);
   transition: 0.16s ease;
+  /* 让整张按钮成为拖动源，避免浏览器直接拖走图片 */
+  -webkit-user-drag: none;
+}
+
+/* 拖动起手的区域整体压暗，落点区域高亮描边 */
+.deck-section {
+  transition:
+    border-color 0.16s ease,
+    box-shadow 0.16s ease;
+}
+
+.deck-section.is-drop-target {
+  border-color: var(--gold);
+  box-shadow: inset 0 0 0 1px var(--gold);
+}
+
+.deck-section.is-drop-source .deck-empty {
+  opacity: 0.5;
 }
 
 .deck-card:hover img {

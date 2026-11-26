@@ -335,6 +335,47 @@ export const useDeckStore = defineStore('deck', () => {
     list.splice(index, 1)
   }
 
+  /**
+   * 跨区域移动：从 from 挪 count（默认 1）张到 to，整叠移完就把源条目删掉。
+   * 卡种（主卡组 / 额外卡组限制）要问卡库，所以由调用方注入 resolve；
+   * 查不到卡时就跳过卡种校验，只受区域上限约束。
+   */
+  function move(
+    id: number,
+    from: DeckSection,
+    to: DeckSection,
+    count = 1,
+    resolve?: (id: number) => CardData | undefined,
+  ): DeckActionResult {
+    if (!current.value) return { ok: false, message: '请先新建一套卡组' }
+    if (from === to) return { ok: false, message: '还在原来的区域' }
+
+    const source = lists.value[from]
+    const index = source.findIndex((item) => item.id === id)
+    if (index < 0) return { ok: false, message: '这张卡不在原区域里' }
+    const entry = source[index]
+    const amount = Math.min(Math.max(1, Math.floor(count) || 1), entry.count)
+
+    const card = resolve?.(id)
+    if (card) {
+      const invalid = placementError(card, to)
+      if (invalid) return { ok: false, message: invalid }
+    }
+    if (counts.value[to] + amount > DECK_LIMITS[to]) {
+      return { ok: false, message: `${sectionLabel(to)}已满 ${DECK_LIMITS[to]} 张` }
+    }
+
+    const list = lists.value[to]
+    const target = list.find((item) => item.id === id)
+    if (target) target.count += amount
+    else list.push({ id: entry.id, name: entry.name, count: amount })
+
+    if (entry.count > amount) entry.count -= amount
+    else source.splice(index, 1)
+
+    return { ok: true, message: `已移动 ${amount} 张到${sectionLabel(to)}：${entry.name}` }
+  }
+
   function clear(section: DeckSection) {
     if (!current.value) return
     lists.value[section].splice(0, lists.value[section].length)
@@ -606,6 +647,7 @@ export const useDeckStore = defineStore('deck', () => {
     removeDeck,
     add,
     remove,
+    move,
     clear,
     clearAll,
     sortAll,

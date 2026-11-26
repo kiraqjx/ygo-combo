@@ -497,6 +497,67 @@ function onDeckCardMenu(event: MouseEvent, id: number, name: string, section: De
   else removeOne(id, name, section)
 }
 
+/* ---- 拖动卡片换区域 ---- */
+
+interface DraggedCard {
+  id: number
+  from: DeckSection
+  count: number
+}
+
+const draggedCard = ref<DraggedCard | null>(null)
+/** 当前鼠标悬停、松手就会落到的区域 */
+const dropSection = ref<DeckSection | null>(null)
+
+function onCardDragStart(event: DragEvent, entry: DeckEntry, section: DeckSection) {
+  draggedCard.value = { id: entry.id, from: section, count: entry.count }
+  dropSection.value = null
+  const transfer = event.dataTransfer
+  if (!transfer) return
+  transfer.effectAllowed = 'move'
+  transfer.setData('text/plain', `${entry.name} ×${entry.count}`)
+  const image = (event.currentTarget as HTMLElement | null)?.querySelector('img')
+  if (image) transfer.setDragImage(image, 42, 58)
+}
+
+function onCardDragEnd() {
+  draggedCard.value = null
+  dropSection.value = null
+}
+
+function onSectionDragOver(event: DragEvent, section: DeckSection) {
+  const dragged = draggedCard.value
+  if (!dragged) return
+  // 原区域不接受落下，也不高亮，避免误以为放到自己身上会有什么效果
+  if (dragged.from === section) {
+    if (dropSection.value) dropSection.value = null
+    return
+  }
+  event.preventDefault()
+  if (event.dataTransfer) event.dataTransfer.dropEffect = 'move'
+  if (dropSection.value !== section) dropSection.value = section
+}
+
+/** dragleave 在子元素之间穿梭时也会触发，用 relatedTarget 过滤掉内部移动 */
+function onSectionDragLeave(event: DragEvent, section: DeckSection) {
+  const panel = event.currentTarget as HTMLElement | null
+  const next = event.relatedTarget as Node | null
+  if (panel && next && panel.contains(next)) return
+  if (dropSection.value === section) dropSection.value = null
+}
+
+/** 拖到别的区域：默认只移动 1 张，按住 Shift 拖动整叠 */
+function onSectionDrop(event: DragEvent, section: DeckSection) {
+  event.preventDefault()
+  const dragged = draggedCard.value
+  draggedCard.value = null
+  dropSection.value = null
+  if (!dragged || dragged.from === section) return
+  const amount = event.shiftKey ? dragged.count : 1
+  const outcome = deck.move(dragged.id, dragged.from, section, amount, (id) => cards.getCard(id))
+  toast(outcome.message, !outcome.ok)
+}
+
 function clearSection(section: DeckSection) {
   deck.clear(section)
   toast(`已清空${DECK_SECTIONS.find((item) => item.id === section)?.label}`)
@@ -698,13 +759,26 @@ function refreshLibrary() {
         <button class="btn sm ghost" :disabled="!deck.counts.main" @click="openHand">模拟起手</button>
         <button class="btn sm ghost" :disabled="!deck.counts.main" @click="starterModal = true">启动率</button>
         <span class="grow" />
-        <span class="inline-note">左键查看效果 · 右键移除 1 张 · Shift+右键移除全部</span>
+        <span class="inline-note">
+          左键查看效果 · 右键移除 1 张 · Shift+右键移除全部 · 拖动卡片换区域（Shift 拖整叠）
+        </span>
       </div>
     </div>
 
     <div class="deck-layout">
       <div class="deck-main">
-        <div v-for="s in sections" :key="s.id" class="panel deck-section">
+        <div
+          v-for="s in sections"
+          :key="s.id"
+          class="panel deck-section"
+          :class="{
+            'is-drop-target': dropSection === s.id,
+            'is-drop-source': draggedCard?.from === s.id,
+          }"
+          @dragover="onSectionDragOver($event, s.id)"
+          @dragleave="onSectionDragLeave($event, s.id)"
+          @drop="onSectionDrop($event, s.id)"
+        >
           <div class="panel-head">
             <span class="panel-title">{{ s.label }} · {{ s.used }} / {{ s.limit }}</span>
             <button class="btn xs ghost" :disabled="!s.entries.length" @click="clearSection(s.id)">清空</button>
@@ -714,9 +788,13 @@ function refreshLibrary() {
               v-for="entry in s.entries"
               :key="entry.id"
               class="deck-card"
-              :title="`${entry.name} ×${entry.count} · 左键查看效果，右键移除 1 张`"
+              :class="{ 'is-dragging': draggedCard?.id === entry.id && draggedCard?.from === s.id }"
+              draggable="true"
+              :title="`${entry.name} ×${entry.count} · 左键查看效果，右键移除 1 张，拖动可换区域`"
               @click="openCard(entry.id, s.id)"
               @contextmenu.prevent="onDeckCardMenu($event, entry.id, entry.name, s.id)"
+              @dragstart="onCardDragStart($event, entry, s.id)"
+              @dragend="onCardDragEnd"
             >
               <img :src="cardImageUrl(entry.id)" :alt="entry.name" loading="lazy" />
               <span v-if="entry.count > 1" class="deck-count">×{{ entry.count }}</span>

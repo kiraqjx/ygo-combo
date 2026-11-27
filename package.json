@@ -7,9 +7,13 @@
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc -b && vite build",
+    "build:deploy": "npm run assets:duel -- --superpre && npm run build && cp -R duel-assets dist/duel-assets",
     "preview": "vite preview",
     "typecheck": "vue-tsc --noEmit",
     "assets:duel": "node scripts/fetch-duel-assets.mjs"
+  },
+  "engines": {
+    "node": ">=22.13"
   },
   "dependencies": {
     "fflate": "^0.8.2",

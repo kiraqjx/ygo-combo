@@ -40,25 +40,55 @@ function onImageError(event: Event) {
   handleCardImageError(event)
 }
 
+/**
+ * 卡牌全息：把指针位置写成 --mx / --my，交给 atmosphere.css 的 radial-gradient 用。
+ * 用委托 + rAF 合并，避免每个卡片各挂一个监听。
+ */
+let holoFrame = 0
+let holoPending: { el: HTMLElement; x: number; y: number } | null = null
+const finePointer = typeof window !== 'undefined' && window.matchMedia('(pointer: fine)').matches
+
+function onPointerMove(event: PointerEvent) {
+  if (!finePointer) return
+  const target = event.target as HTMLElement | null
+  const tile = target?.closest?.('.card-tile') as HTMLElement | null
+  if (!tile) return
+  holoPending = { el: tile, x: event.clientX, y: event.clientY }
+  if (holoFrame) return
+  holoFrame = requestAnimationFrame(() => {
+    holoFrame = 0
+    const pending = holoPending
+    if (!pending) return
+    const box = pending.el.getBoundingClientRect()
+    pending.el.style.setProperty('--mx', `${((pending.x - box.left) / box.width) * 100}%`)
+    pending.el.style.setProperty('--my', `${((pending.y - box.top) / box.height) * 100}%`)
+  })
+}
+
 onMounted(() => {
   void cardStore.init()
   document.addEventListener('error', onImageError, true)
+  document.addEventListener('pointermove', onPointerMove, { passive: true })
 })
 
 onUnmounted(() => {
   document.removeEventListener('error', onImageError, true)
+  document.removeEventListener('pointermove', onPointerMove)
+  if (holoFrame) cancelAnimationFrame(holoFrame)
 })
 </script>
 
 <template>
   <div class="app-layout">
+  <a class="skip-link" href="#main">跳到主要内容</a>
   <header class="site-header">
     <div class="header-inner">
       <RouterLink to="/" class="brand">
         <span class="brand-mark">
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
-            <path d="M12 3 21 20H3L12 3Z" />
-            <circle cx="12" cy="14.6" r="2.4" />
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+            <path d="M12 2.6 21.4 12 12 21.4 2.6 12 12 2.6Z" />
+            <path d="M12 7.4 16.6 12 12 16.6 7.4 12 12 7.4Z" opacity=".7" />
+            <circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none" />
           </svg>
         </span>
         <span>
@@ -101,7 +131,7 @@ onUnmounted(() => {
     </div>
   </header>
 
-  <main class="app-main">
+  <main id="main" class="app-main">
     <RouterView />
   </main>
 
@@ -112,8 +142,16 @@ onUnmounted(() => {
     </div>
   </footer>
 
-  <div class="toast-wrap">
-    <div v-for="t in toasts" :key="t.id" class="toast" :class="{ err: t.error }">{{ t.message }}</div>
+  <div class="toast-wrap" role="status" aria-live="polite">
+    <div
+      v-for="t in toasts"
+      :key="t.id"
+      class="toast"
+      :class="{ err: t.error }"
+      :role="t.error ? 'alert' : 'status'"
+    >
+      {{ t.message }}
+    </div>
   </div>
   </div>
 </template>

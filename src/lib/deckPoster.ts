@@ -181,23 +181,23 @@ function wrapLines(ctx: CanvasRenderingContext2D, text: string, maxWidth: number
 
 function drawBackdrop(ctx: CanvasRenderingContext2D, width: number, height: number) {
   const bg = ctx.createLinearGradient(0, 0, width * 0.45, height)
-  bg.addColorStop(0, '#070a11')
-  bg.addColorStop(0.45, '#0c131f')
-  bg.addColorStop(1, '#080b12')
+  bg.addColorStop(0, '#0b0806')
+  bg.addColorStop(0.45, '#13100b')
+  bg.addColorStop(1, '#0c0907')
   ctx.fillStyle = bg
   ctx.fillRect(0, 0, width, height)
 
   const cool = ctx.createRadialGradient(width * 0.12, 40, 0, width * 0.12, 40, width * 0.95)
-  cool.addColorStop(0, 'rgba(86, 190, 255, 0.20)')
-  cool.addColorStop(0.5, 'rgba(86, 190, 255, 0.05)')
-  cool.addColorStop(1, 'rgba(86, 190, 255, 0)')
+  cool.addColorStop(0, 'rgba(194, 162, 75, 0.20)')
+  cool.addColorStop(0.5, 'rgba(194, 162, 75, 0.05)')
+  cool.addColorStop(1, 'rgba(194, 162, 75, 0)')
   ctx.fillStyle = cool
   ctx.fillRect(0, 0, width, height)
 
   const violet = ctx.createRadialGradient(width * 0.92, height * 0.72, 0, width * 0.92, height * 0.72, width * 0.85)
-  violet.addColorStop(0, 'rgba(150, 110, 255, 0.18)')
-  violet.addColorStop(0.55, 'rgba(150, 110, 255, 0.04)')
-  violet.addColorStop(1, 'rgba(150, 110, 255, 0)')
+  violet.addColorStop(0, 'rgba(201, 155, 60, 0.18)')
+  violet.addColorStop(0.55, 'rgba(201, 155, 60, 0.04)')
+  violet.addColorStop(1, 'rgba(201, 155, 60, 0)')
   ctx.fillStyle = violet
   ctx.fillRect(0, 0, width, height)
 
@@ -222,7 +222,7 @@ function drawBackdrop(ctx: CanvasRenderingContext2D, width: number, height: numb
 
 function drawHeader(ctx: CanvasRenderingContext2D, deck: PosterDeck, total: number) {
   ctx.save()
-  ctx.fillStyle = 'rgba(140, 205, 255, 0.62)'
+  ctx.fillStyle = 'rgba(194, 162, 75, 0.62)'
   ctx.font = `600 12px ${MONO}`
   drawSpaced(ctx, 'DECK LIST', PAD, 74, 4)
 
@@ -230,27 +230,27 @@ function drawHeader(ctx: CanvasRenderingContext2D, deck: PosterDeck, total: numb
   const size = fitName(ctx, name, W - PAD * 2 - 260, 60)
   ctx.font = `700 ${size}px ${FONT}`
   const title = ctx.createLinearGradient(PAD, 0, PAD + 820, 0)
-  title.addColorStop(0, '#f4f9ff')
-  title.addColorStop(1, '#78b6ea')
+  title.addColorStop(0, '#fdf7e9')
+  title.addColorStop(1, '#c2a24b')
   ctx.fillStyle = title
   ctx.fillText(name, PAD, 74 + size + 14)
 
   // 右上角总数
   ctx.textAlign = 'right'
   ctx.font = `700 46px ${MONO}`
-  ctx.fillStyle = 'rgba(236, 246, 255, 0.92)'
+  ctx.fillStyle = 'rgba(248, 241, 226, 0.92)'
   ctx.fillText(String(total), W - PAD, 104)
 
   ctx.textAlign = 'left'
   ctx.font = `600 11px ${MONO}`
-  ctx.fillStyle = 'rgba(150, 190, 225, 0.55)'
+  ctx.fillStyle = 'rgba(201, 155, 60, 0.55)'
   drawSpaced(ctx, 'CARDS', W - PAD - measureSpaced(ctx, 'CARDS', 3), 128, 3)
 
   // 分隔线
   const line = ctx.createLinearGradient(PAD, 0, W - PAD, 0)
-  line.addColorStop(0, 'rgba(120, 200, 255, 0.55)')
-  line.addColorStop(0.45, 'rgba(120, 200, 255, 0.12)')
-  line.addColorStop(1, 'rgba(150, 110, 255, 0.02)')
+  line.addColorStop(0, 'rgba(194, 162, 75, 0.55)')
+  line.addColorStop(0.45, 'rgba(194, 162, 75, 0.12)')
+  line.addColorStop(1, 'rgba(201, 155, 60, 0.02)')
   ctx.fillStyle = line
   ctx.fillRect(PAD, HEADER_H - 26, W - PAD * 2, 1.5)
   ctx.restore()
@@ -265,7 +265,7 @@ function drawSectionTitle(ctx: CanvasRenderingContext2D, block: Block, y: number
   roundRect(ctx, PAD, y + 4, 4, 30, 2)
   ctx.fill()
 
-  ctx.fillStyle = 'rgba(238, 246, 255, 0.94)'
+  ctx.fillStyle = 'rgba(250, 243, 228, 0.94)'
   ctx.font = `600 21px ${FONT}`
   ctx.fillText(block.label, PAD + 16, y + 28)
   const labelWidth = ctx.measureText(block.label).width
@@ -294,9 +294,9 @@ function drawPlaceholder(
   h: number,
 ) {
   const grad = ctx.createLinearGradient(x, y, x + w, y + h)
-  grad.addColorStop(0, '#18202d')
-  grad.addColorStop(0.55, '#131a25')
-  grad.addColorStop(1, '#0d131c')
+  grad.addColorStop(0, '#241c13')
+  grad.addColorStop(0.55, '#1c1610')
+  grad.addColorStop(1, '#110e0a')
   ctx.fillStyle = grad
   ctx.fillRect(x, y, w, h)
 
@@ -312,11 +312,11 @@ function drawPlaceholder(
   ctx.restore()
 
   ctx.save()
-  ctx.fillStyle = 'rgba(150, 175, 205, 0.42)'
+  ctx.fillStyle = 'rgba(173, 156, 130, 0.42)'
   ctx.font = `500 11px ${MONO}`
   ctx.fillText(`#${slot.id}`, x + 14, y + 24)
 
-  ctx.fillStyle = 'rgba(206, 220, 236, 0.9)'
+  ctx.fillStyle = 'rgba(224, 210, 184, 0.9)'
   ctx.font = `600 16px ${FONT}`
   const lines = wrapLines(ctx, slot.name, w - 28)
   const lineHeight = 24
@@ -340,7 +340,7 @@ function drawCard(
   ctx.shadowBlur = 16
   ctx.shadowOffsetY = 7
   roundRect(ctx, x, y, CARD_W, CARD_H, 10)
-  ctx.fillStyle = '#101722'
+  ctx.fillStyle = '#14100b'
   ctx.fill()
   ctx.restore()
 
@@ -384,23 +384,23 @@ function drawFooter(ctx: CanvasRenderingContext2D, height: number, deck: PosterD
   ctx.stroke()
 
   ctx.font = `600 13px ${FONT}`
-  ctx.fillStyle = 'rgba(150, 205, 245, 0.75)'
+  ctx.fillStyle = 'rgba(240, 211, 138, 0.75)'
   ctx.fillText('ygo-combo', PAD, y + 52)
   ctx.font = `400 12px ${FONT}`
-  ctx.fillStyle = 'rgba(160, 180, 200, 0.4)'
+  ctx.fillStyle = 'rgba(178, 163, 138, 0.4)'
   ctx.fillText('卡组可视化', PAD + 76, y + 52)
 
   const size = (list: DeckEntry[]) => list.reduce((sum, entry) => sum + entry.count, 0)
   ctx.textAlign = 'right'
   ctx.font = `400 12px ${FONT}`
-  ctx.fillStyle = 'rgba(160, 180, 200, 0.45)'
+  ctx.fillStyle = 'rgba(178, 163, 138, 0.45)'
   ctx.fillText(
     `主 ${size(deck.main)} · 额 ${size(deck.extra)} · 副 ${size(deck.side)}`,
     W - PAD,
     y + 46,
   )
   const stamp = new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' })
-  ctx.fillStyle = 'rgba(160, 180, 200, 0.28)'
+  ctx.fillStyle = 'rgba(178, 163, 138, 0.28)'
   ctx.fillText(stamp, W - PAD, y + 68)
   ctx.restore()
 }
@@ -430,9 +430,9 @@ export async function renderDeckPoster(deck: PosterDeck, options: PosterOptions 
   const onProgress = options.onProgress ?? (() => {})
 
   const sections: Array<{ label: string; accent: string; entries: DeckEntry[] }> = [
-    { label: '主卡组', accent: '#5fc8ff', entries: deck.main },
-    { label: '额外卡组', accent: '#a78bfa', entries: deck.extra },
-    { label: '副卡组', accent: '#f6c86b', entries: deck.side },
+    { label: '主卡组', accent: '#a8823a', entries: deck.main },
+    { label: '额外卡组', accent: '#a8823a', entries: deck.extra },
+    { label: '副卡组', accent: '#d9a94f', entries: deck.side },
   ]
 
   const blocks: Block[] = []

@@ -335,7 +335,7 @@ async function onFile(event: Event) {
 }
 
 .guide-toc a:hover {
-  border-color: rgba(113, 183, 255, 0.45);
+  border-color: rgba(217, 185, 106, 0.45);
   color: var(--text);
 }
 
@@ -354,7 +354,7 @@ async function onFile(event: Event) {
   padding: 14px;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
-  background: rgba(240, 243, 246, 0.015);
+  background: rgba(232, 224, 208, 0.015);
 }
 
 .step-no {
@@ -362,7 +362,7 @@ async function onFile(event: Event) {
   width: 22px;
   height: 22px;
   border-radius: 50%;
-  border: 1px solid rgba(113, 183, 255, 0.45);
+  border: 1px solid rgba(217, 185, 106, 0.45);
   color: var(--gold);
   font-family: var(--mono);
   font-size: 11px;

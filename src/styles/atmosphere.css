@@ -1,0 +1,842 @@
+/*
+ * 沉金 · 石刻 —— 材质与动效层
+ * 这一层只做三件事：字体、质感（噪声 / 暗角 / 浮雕 / 拉丝）、动效。
+ * 组件结构在 skin.css，布局在 style.css，互不越界。
+ */
+
+/* ================================================================
+   0. 字体（自托管，无外部请求）
+   ================================================================ */
+
+@font-face {
+  font-family: "Cinzel";
+  src: url("/fonts/cinzel-var.woff2") format("woff2");
+  font-weight: 500 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Cormorant Garamond";
+  src: url("/fonts/cormorant-var.woff2") format("woff2");
+  font-weight: 400 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Cormorant Garamond";
+  src: url("/fonts/cormorant-italic.woff2") format("woff2");
+  font-weight: 400 500;
+  font-style: italic;
+  font-display: swap;
+}
+
+/* 只裁了界面用到的 1300 余字；卡名等动态文本按字回退到系统宋体 */
+@font-face {
+  font-family: "Noto Serif SC";
+  src: url("/fonts/noto-serif-sc-600.woff") format("woff");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+h1,
+h2,
+h3,
+.section-head h2,
+.page-title {
+  font-family: var(--display);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+/* 刻痕：暗底上"凿"下去，浅底上"压"出来 */
+h1,
+h2,
+.page-title {
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.75);
+}
+
+[data-theme="light"] h1,
+[data-theme="light"] h2,
+[data-theme="light"] .page-title {
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.65);
+}
+
+.eyebrow,
+.panel-title,
+.label,
+.field > label {
+  font-family: var(--display);
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.6);
+}
+
+[data-theme="light"] .eyebrow,
+[data-theme="light"] .panel-title,
+[data-theme="light"] .label,
+[data-theme="light"] .field > label {
+  text-shadow: none;
+}
+
+/* 渐变裁切的文字不能带 text-shadow：阴影会盖在渐变上，把金色洗成灰 */
+.home-title-main,
+.hero h1 .accent,
+.rate-value {
+  text-shadow: none;
+}
+
+/* 引文 / 副标题：Cormorant 的斜体最像手抄本 */
+.home-title-sub,
+.hero-sub {
+  font-family: var(--serif);
+  letter-spacing: 0.08em;
+}
+
+.foot-inner {
+  font-family: var(--serif);
+  letter-spacing: 0.05em;
+}
+
+/* ================================================================
+   1. 石面：三层阴影 + 顶部受光 + 内嵌暗线
+   ================================================================ */
+
+/*
+ * 面板：顶部一盏斜打的冷光 → 中段近黑 → 底部收暗。
+ * 一圈 1px 金线是「卡框」，四角角饰降到几乎看不见，只当暗示。
+ */
+.panel {
+  background:
+    radial-gradient(140% 90% at 50% -20%, rgba(109, 139, 212, 0.07), transparent 52%),
+    linear-gradient(180deg, rgba(244, 230, 195, 0.035), rgba(244, 230, 195, 0) 140px),
+    linear-gradient(180deg, #101018 0%, #0a0a10 100%);
+  border-color: rgba(217, 185, 106, 0.18);
+  box-shadow:
+    var(--shadow-1),
+    var(--shadow-2),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.55),
+    inset 0 1px 0 rgba(244, 230, 195, 0.06);
+}
+
+.panel::before {
+  border-color: rgba(217, 185, 106, 0.06);
+}
+
+.panel::after {
+  opacity: 0.26;
+}
+
+.panel-head {
+  background:
+    linear-gradient(180deg, rgba(217, 185, 106, 0.055), rgba(217, 185, 106, 0) 100%);
+  border-bottom-color: rgba(217, 185, 106, 0.12);
+}
+
+/* 弹窗：比面板更暗一档，靠四周的深投影脱离页面 */
+.modal,
+.drawer {
+  background:
+    radial-gradient(120% 80% at 50% -10%, rgba(109, 139, 212, 0.06), transparent 55%),
+    linear-gradient(180deg, #111119 0%, #08080d 100%);
+  box-shadow:
+    0 2px 4px rgba(0, 0, 0, 0.6),
+    0 48px 110px -40px #000,
+    inset 0 0 0 1px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(244, 230, 195, 0.07);
+}
+
+/* 表单：下沉一格，聚焦时才浮起来 */
+.input,
+.select,
+.textarea {
+  background: linear-gradient(180deg, #07070c, #0b0b12);
+  box-shadow:
+    inset 0 1px 3px rgba(0, 0, 0, 0.72),
+    inset 0 -1px 0 rgba(244, 230, 195, 0.035);
+}
+
+/* ================================================================
+   2. 金属：平整板面 + 上沿受光
+   ================================================================ */
+
+/*
+ * 拉丝纹理在 100% 缩放下不是「拉丝」，是一层脏噪点，全部去掉。
+ * 金属感交给「明度落差 + 一圈更亮的边」承担。
+ */
+.btn {
+  background: linear-gradient(180deg, rgba(30, 30, 45, 0.94) 0%, rgba(13, 13, 20, 0.96) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(244, 230, 195, 0.08),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.55),
+    0 1px 2px rgba(0, 0, 0, 0.45);
+}
+
+.btn:hover {
+  background: linear-gradient(180deg, rgba(41, 41, 60, 0.96) 0%, rgba(18, 18, 28, 0.97) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(244, 230, 195, 0.12),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.55),
+    0 0 0 1px rgba(217, 185, 106, 0.14),
+    0 14px 30px -24px #000;
+}
+
+/* 金箔主按钮：四级明度，最上一格接近白，金箔才像在反光 */
+.btn.primary {
+  border-color: rgba(244, 230, 195, 0.55);
+  background: linear-gradient(180deg, #f8eed4 0%, #ddc07c 36%, #c3a057 64%, #a8843c 100%);
+  color: #16110a;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.55),
+    inset 0 -1px 0 rgba(74, 52, 12, 0.4),
+    0 2px 3px rgba(0, 0, 0, 0.45),
+    0 16px 34px -24px rgba(217, 185, 106, 0.5);
+}
+
+.btn.primary:hover {
+  background: linear-gradient(180deg, #fdf5e2 0%, #e6cb8b 36%, #cdab63 64%, #b28f45 100%);
+  filter: none;
+  color: #100c06;
+}
+
+.brand-mark {
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.75),
+    inset 0 1px 0 rgba(244, 230, 195, 0.16);
+}
+
+/* ================================================================
+   3. 卡牌：全息跟随指针
+   ================================================================ */
+
+/* 卡框：外一圈发丝金线 + 内一圈暗线，实卡的双层边 */
+.card-img {
+  border-color: rgba(217, 185, 106, 0.16);
+  box-shadow:
+    0 2px 4px rgba(0, 0, 0, 0.65),
+    0 16px 32px -24px #000,
+    inset 0 0 0 1px rgba(0, 0, 0, 0.7),
+    inset 0 1px 0 rgba(244, 230, 195, 0.07);
+}
+
+/*
+ * 全息：光斑跟随指针（--mx / --my 由 App.vue 的委托监听写入）。
+ * 冷白金 + 一点青金，模拟 Secret Rare 的棱面反光，避免纯白死亮。
+ */
+.card-img::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--dur-2) var(--ease);
+  mix-blend-mode: screen;
+  background: radial-gradient(
+    240px circle at var(--mx, 50%) var(--my, 50%),
+    rgba(255, 252, 244, 0.13),
+    rgba(244, 230, 195, 0.08) 28%,
+    rgba(109, 139, 212, 0.06) 46%,
+    transparent 66%
+  );
+}
+
+.card-tile:hover .card-img::before {
+  opacity: 1;
+}
+
+.card-tile:hover .card-img,
+.card-tile:focus-visible .card-img {
+  border-color: rgba(217, 185, 106, 0.45);
+  box-shadow:
+    0 2px 4px rgba(0, 0, 0, 0.65),
+    0 26px 48px -26px #000,
+    inset 0 0 0 1px rgba(0, 0, 0, 0.7),
+    0 0 0 1px rgba(217, 185, 106, 0.14);
+}
+
+/* ================================================================
+   4. 动效：入场 / 路由切换 / 主题切换 / 连锁脉冲
+   ================================================================ */
+
+@keyframes relic-rise {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 10px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes relic-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* 路由切换：内容轻微上浮，配合主题切换的交叉淡入 */
+.page,
+.home {
+  animation: relic-rise 0.44s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+/* 首页编舞：标题、入口卡依次落位 */
+.home-eyebrow {
+  animation: relic-fade 0.7s ease both;
+}
+
+.home-title-main {
+  animation: relic-rise 0.85s cubic-bezier(0.16, 0.68, 0.3, 1) both;
+}
+
+.home-title-sub,
+.home-actions,
+.home-ticker {
+  animation: relic-rise 0.7s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+  animation-delay: 0.12s;
+}
+
+.home-actions {
+  animation-delay: 0.2s;
+}
+
+.home-ticker {
+  animation-delay: 0.28s;
+}
+
+.home-entries > * {
+  animation: relic-rise 0.6s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+.home-entries > *:nth-child(1) {
+  animation-delay: 0.3s;
+}
+.home-entries > *:nth-child(2) {
+  animation-delay: 0.36s;
+}
+.home-entries > *:nth-child(3) {
+  animation-delay: 0.42s;
+}
+.home-entries > *:nth-child(4) {
+  animation-delay: 0.48s;
+}
+.home-entries > *:nth-child(5) {
+  animation-delay: 0.54s;
+}
+.home-entries > *:nth-child(6) {
+  animation-delay: 0.6s;
+}
+
+/* 主题切换：原生 View Transitions 交叉淡入（不支持时直接切，无副作用） */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 0.32s;
+  animation-timing-function: ease;
+}
+
+/* 决斗盘：刚发生变化的区域金环扩散一次 */
+@keyframes relic-ring {
+  0% {
+    box-shadow: 0 0 0 0 rgba(217, 185, 106, 0.55);
+  }
+  70% {
+    box-shadow: 0 0 0 7px rgba(217, 185, 106, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(217, 185, 106, 0);
+  }
+}
+
+.duel-zone-row.changed .duel-slot {
+  animation: relic-ring 1.1s ease-out 1;
+}
+
+/* 首页光晕缓慢呼吸，别做成闪烁 */
+@keyframes relic-breathe {
+  0%,
+  100% {
+    opacity: 0.75;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.home-aurora {
+  animation: relic-breathe 9s ease-in-out infinite;
+}
+
+/* ================================================================
+   5. 浅色：羊皮纸手抄本
+   ================================================================ */
+
+[data-theme="light"] .panel {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0) 130px),
+    linear-gradient(180deg, #f8f1e0 0%, #f2e8d2 100%);
+  border-color: rgba(143, 109, 36, 0.3);
+  box-shadow:
+    var(--shadow-1),
+    var(--shadow-2),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.7),
+    inset 0 -1px 0 rgba(143, 109, 36, 0.1);
+}
+
+[data-theme="light"] .panel::before {
+  border-color: rgba(143, 109, 36, 0.1);
+}
+
+[data-theme="light"] .panel-head {
+  background: linear-gradient(180deg, rgba(143, 109, 36, 0.08), transparent);
+  border-bottom-color: rgba(143, 109, 36, 0.18);
+}
+
+[data-theme="light"] .modal,
+[data-theme="light"] .drawer {
+  background: linear-gradient(180deg, #fbf5e6 0%, #f2e8d2 100%);
+  box-shadow:
+    0 2px 4px rgba(70, 52, 26, 0.14),
+    0 40px 80px -40px rgba(70, 52, 26, 0.5),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.7);
+}
+
+[data-theme="light"] .input,
+[data-theme="light"] .select,
+[data-theme="light"] .textarea {
+  background: #fdf8ea;
+  box-shadow:
+    inset 0 1px 2px rgba(120, 92, 40, 0.14),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.8);
+}
+
+[data-theme="light"] .btn {
+  background: linear-gradient(180deg, #fdf7e8 0%, #ecdfc4 100%);
+  box-shadow:
+    inset 0 1px 0 #fffdf6,
+    inset 0 -1px 0 rgba(143, 109, 36, 0.18),
+    0 1px 2px rgba(70, 52, 26, 0.14);
+}
+
+[data-theme="light"] .btn:hover {
+  background: linear-gradient(180deg, #fffaee 0%, #e7d7b6 100%);
+  box-shadow:
+    inset 0 1px 0 #fffdf6,
+    inset 0 -1px 0 rgba(143, 109, 36, 0.22),
+    0 8px 20px -16px rgba(70, 52, 26, 0.6);
+}
+
+[data-theme="light"] .btn.primary {
+  background: linear-gradient(180deg, #f6e3b4 0%, #ddbe74 38%, #c6a257 64%, #a9853d 100%);
+  color: #1a1408;
+  border-color: rgba(120, 88, 22, 0.45);
+}
+
+/*
+ * 卡图在羊皮纸上要有个深色托底，别飘着。
+ * 这个底色同时是卡库加载骨架（12 个 .card-img 占位）的可见部分，
+ * 所以取比页面深一档的羊皮纸，压 35% 透明度后仍能看出格子。
+ */
+[data-theme="light"] .card-img {
+  border-color: rgba(143, 109, 36, 0.32);
+  background: linear-gradient(160deg, #cdbb98, #bfa87f);
+  box-shadow:
+    0 1px 2px rgba(70, 52, 26, 0.2),
+    0 12px 24px -20px rgba(70, 52, 26, 0.5),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.5);
+}
+
+[data-theme="light"] .card-img::before {
+  mix-blend-mode: soft-light;
+}
+
+[data-theme="light"] .toast {
+  background: linear-gradient(180deg, #2a2115, #1b150d);
+  border-color: rgba(217, 185, 106, 0.45);
+  color: #f2e6c8;
+}
+
+[data-theme="light"] .site-header {
+  background: linear-gradient(180deg, rgba(250, 244, 230, 0.96), rgba(240, 231, 210, 0.92));
+  border-bottom-color: rgba(143, 109, 36, 0.28);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+[data-theme="light"] .site-header::after {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(143, 109, 36, 0.4) 22%,
+    rgba(168, 130, 58, 0.6) 50%,
+    rgba(143, 109, 36, 0.4) 78%,
+    transparent
+  );
+}
+
+[data-theme="light"] .nav a.router-link-active {
+  color: #4a350f;
+  text-shadow: none;
+}
+
+[data-theme="light"] .home-entry-icon {
+  color: #4a350f;
+  border-color: rgba(143, 109, 36, 0.45);
+}
+
+[data-theme="light"] .site-foot {
+  background: rgba(233, 223, 200, 0.6);
+  border-top-color: rgba(143, 109, 36, 0.2);
+}
+
+/* 首页：羊皮纸上的墨与印 */
+[data-theme="light"] .home-eyebrow {
+  color: #8f6d24;
+}
+
+[data-theme="light"] .home-title-main {
+  background: linear-gradient(178deg, #15151d 0%, #4a350f 42%, #6b4f17 72%, #2a2115 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  filter: drop-shadow(0 1px 0 rgba(255, 255, 255, 0.85));
+}
+
+[data-theme="light"] .home-aurora {
+  opacity: 0.55;
+}
+
+[data-theme="light"] .home-entries > * {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.6), transparent 120px),
+    linear-gradient(158deg, #f9f2e1 0%, #efe4cc 100%);
+  border-color: rgba(143, 109, 36, 0.28);
+  box-shadow:
+    0 1px 2px rgba(70, 52, 26, 0.12),
+    0 16px 34px -28px rgba(70, 52, 26, 0.5);
+}
+
+[data-theme="light"] .home-entry:hover {
+  border-color: rgba(143, 109, 36, 0.5);
+  box-shadow:
+    0 2px 4px rgba(70, 52, 26, 0.14),
+    0 22px 44px -30px rgba(70, 52, 26, 0.55);
+}
+
+[data-theme="light"] .home-stats {
+  border-top-color: rgba(143, 109, 36, 0.24);
+}
+
+[data-theme="light"] .home-stat b {
+  color: #5f4614;
+}
+
+/* ================================================================
+   6. 减动效
+   ================================================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  .page,
+  .home,
+  .home-eyebrow,
+  .home-title-main,
+  .home-title-sub,
+  .home-actions,
+  .home-ticker,
+  .home-entries > *,
+  .duel-zone-row.changed .duel-slot {
+    animation: none;
+  }
+
+  .home-aurora {
+    animation: none;
+    opacity: 0.85;
+  }
+
+  .card-img::before {
+    display: none;
+  }
+}
+
+/* ================================================================
+   7. 首页收尾：标题刻痕、主视觉富对比、分隔金线
+   ================================================================ */
+
+.home-title-main {
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.6)) drop-shadow(0 26px 60px rgba(217, 185, 106, 0.18));
+}
+
+.home-bg {
+  filter: saturate(0.56) sepia(0.32) brightness(0.78) contrast(1.12);
+}
+
+.home-hero::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(217, 185, 106, 0.5), rgba(217, 185, 106, 0.06) 42%, transparent 78%);
+}
+
+.home-eyebrow {
+  letter-spacing: 0.44em;
+}
+
+.home-ticker {
+  border-radius: 3px;
+}
+
+[data-theme="light"] .home-bg {
+  filter: saturate(0.62) sepia(0.34) brightness(0.94) contrast(1.06);
+}
+
+[data-theme="light"] .home-hero::after {
+  background: linear-gradient(90deg, rgba(143, 109, 36, 0.45), rgba(143, 109, 36, 0.06) 42%, transparent 78%);
+}
+
+[data-theme="light"] .home-title-main {
+  filter: drop-shadow(0 1px 0 rgba(255, 255, 255, 0.85));
+}
+
+/* ================================================================
+   8. 首页主视觉：让图缓缓沉下去，标题前压一盏灯
+   ================================================================ */
+
+.home-bg {
+  mask-image: linear-gradient(180deg, #000 0%, #000 52%, rgba(0, 0, 0, 0.55) 78%, transparent 100%);
+  -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 52%, rgba(0, 0, 0, 0.55) 78%, transparent 100%);
+}
+
+.home-copy::before {
+  content: "";
+  position: absolute;
+  left: -14%;
+  top: -22%;
+  width: 640px;
+  height: 480px;
+  pointer-events: none;
+  z-index: -1;
+  background: radial-gradient(closest-side, rgba(217, 185, 106, 0.16), transparent 72%);
+}
+
+.home-stat:nth-child(1) b {
+  color: var(--gold-hi);
+}
+
+.home-stat:nth-child(2) b {
+  color: var(--gold);
+}
+
+.home-stat:nth-child(3) b {
+  color: var(--parchment);
+}
+
+[data-theme="light"] .home-copy::before {
+  background: radial-gradient(closest-side, rgba(143, 109, 36, 0.12), transparent 72%);
+}
+
+[data-theme="light"] .home-stat:nth-child(3) b {
+  color: #6b4f17;
+}
+
+/* ================================================================
+   9. 浅色细节：朱批 + 墨线（手抄本的印刷惯例）
+   ================================================================ */
+
+[data-theme="light"] .home-eyebrow {
+  color: #8a3327;
+}
+
+[data-theme="light"] .home-eyebrow::before,
+[data-theme="light"] .home-eyebrow::after {
+  background: linear-gradient(90deg, transparent, rgba(138, 51, 39, 0.6));
+}
+
+[data-theme="light"] .home-entry-icon {
+  color: #8a3327;
+  border-color: rgba(138, 51, 39, 0.35);
+  background: linear-gradient(150deg, #fdf7e8, #f0e2c6);
+}
+
+[data-theme="light"] .home-entry:nth-child(2n) .home-entry-icon {
+  color: #4a350f;
+  border-color: rgba(143, 109, 36, 0.4);
+}
+
+[data-theme="light"] .nav a {
+  color: #5a4a33;
+}
+
+[data-theme="light"] .nav a:hover {
+  color: #241d13;
+}
+
+[data-theme="light"] .home-stat:nth-child(1) b,
+[data-theme="light"] .home-stat:nth-child(2) b,
+[data-theme="light"] .home-stat:nth-child(3) b {
+  color: #3a2a0c;
+}
+
+[data-theme="light"] .home-stat:nth-child(2) b {
+  color: #8a3327;
+}
+
+[data-theme="light"] .panel-title::before,
+[data-theme="light"] .eyebrow {
+  background: linear-gradient(180deg, #b3862c, #6b4f17);
+}
+
+[data-theme="light"] .eyebrow {
+  color: #5f4614;
+  border-color: rgba(143, 109, 36, 0.35);
+  background: rgba(143, 109, 36, 0.08);
+}
+
+/* ================================================================
+   10. 可读性：深色下的小字别糊在背景里
+   ================================================================ */
+
+.card-name {
+  color: var(--text-dim);
+}
+
+.label,
+.field > label,
+.filter-group > .label {
+  color: #9c8b6f;
+}
+
+.result-meta,
+.chip-dim {
+  color: var(--text-mute);
+}
+
+[data-theme="light"] .label,
+[data-theme="light"] .field > label,
+[data-theme="light"] .filter-group > .label {
+  color: #6b5a41;
+}
+
+[data-theme="light"] .card-name {
+  color: #4a3a28;
+}
+
+/* ================================================================
+   11. 浅色细节：控件要在羊皮纸上立得住
+   ================================================================ */
+
+[data-theme="light"] .chip {
+  border-color: rgba(143, 109, 36, 0.36);
+  background: linear-gradient(180deg, #fdf7e8, #f4e9d2);
+  color: #4a3a28;
+}
+
+[data-theme="light"] .chip:hover {
+  border-color: rgba(143, 109, 36, 0.6);
+  color: #241d13;
+}
+
+[data-theme="light"] .chip.on {
+  border-color: rgba(143, 109, 36, 0.65);
+  background: linear-gradient(180deg, #f0dfb8, #e6cfa0);
+  color: #3a2a0c;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+[data-theme="light"] .seg {
+  border-color: rgba(143, 109, 36, 0.34);
+  background: #f1e6cf;
+}
+
+[data-theme="light"] .seg button {
+  color: #5a4a33;
+}
+
+[data-theme="light"] .seg button.on {
+  background: linear-gradient(180deg, #fdf7e8, #efdfbe);
+  color: #3a2a0c;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.8),
+    0 1px 2px rgba(70, 52, 26, 0.14);
+}
+
+[data-theme="light"] .search-bar {
+  border-color: rgba(143, 109, 36, 0.32);
+  background: linear-gradient(120deg, #f3e8d1, #eee2c8);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.7),
+    0 1px 2px rgba(70, 52, 26, 0.08);
+}
+
+[data-theme="light"] .input,
+[data-theme="light"] .select,
+[data-theme="light"] .textarea {
+  border-color: rgba(143, 109, 36, 0.3);
+}
+
+[data-theme="light"] .card-badge {
+  background: rgba(28, 22, 16, 0.82);
+  color: #e6d7b6;
+  border-color: rgba(217, 185, 106, 0.35);
+}
+
+[data-theme="light"] .panel-title {
+  color: #5f4614;
+}
+
+[data-theme="light"] .icon-btn {
+  border-color: rgba(143, 109, 36, 0.34);
+  color: #5a4a33;
+}
+
+[data-theme="light"] .icon-btn:hover {
+  background: rgba(143, 109, 36, 0.1);
+  color: #241d13;
+}
+
+/* ================================================================
+   12. 页面标题：刻字 + 一道金线，别让内容页开局就"没设计"
+   ================================================================ */
+
+.page > h1,
+.page-title,
+.rates-head h1 {
+  position: relative;
+  padding-bottom: 12px;
+  font-family: var(--display);
+  font-size: clamp(21px, 2.1vw, 26px);
+  letter-spacing: 0.06em;
+  color: var(--text);
+}
+
+.page > h1::after,
+.page-title::after,
+.rates-head h1::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 58px;
+  height: 1px;
+  background: linear-gradient(90deg, var(--gold), rgba(217, 185, 106, 0));
+  box-shadow: 0 0 12px var(--gold-glow);
+}
+
+[data-theme="light"] .page > h1,
+[data-theme="light"] .page-title,
+[data-theme="light"] .rates-head h1 {
+  color: #241d13;
+}
+
+[data-theme="light"] .page > h1::after,
+[data-theme="light"] .page-title::after,
+[data-theme="light"] .rates-head h1::after {
+  background: linear-gradient(90deg, #8f6d24, rgba(143, 109, 36, 0));
+  box-shadow: none;
+}

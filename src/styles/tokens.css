@@ -1,0 +1,95 @@
+/*
+ * 设计 token：虚空 · 金箔（Obsidian & Gold Foil）
+ *
+ * 底色是冷调黑曜石，不是暖褐石材。冷底 + 暖金才有「深」的对比：
+ * 金只做线、边、小面积高光，绝不铺面；面靠明度阶梯拉开层次。
+ * 青金石（lapis）是千年神器的宝石蓝，只给焦点、选中、关键数据。
+ * 血褐只给危险与对手。
+ *
+ * --accent / --cyan / --violet 是历史变量名，已映射到新色，不要直接引用。
+ * 后续层（skin / atmosphere）仍按原顺序覆盖。
+ */
+:root {
+  color-scheme: dark;
+
+  /* ---- 表面阶梯：越往上越亮，这是「深邃」的来源 ---- */
+  --void: #030306;
+  --bg: #07070c;
+  --bg-2: #0a0a12;
+  --panel: #0d0d15;
+  --panel-2: #13131d;
+  --surface-3: #1a1a26;
+
+  /* 发丝线：1px 是这套设计的骨架，只比底色亮一档 */
+  --line: #20202b;
+  --line-strong: #33333f;
+  --hairline: rgba(228, 216, 190, 0.08);
+
+  --text: #ece7db;
+  --text-dim: #b4aa96;
+  --text-mute: #8d8474;
+
+  /* ---- 真金：靠明度跨度出金属感，饱和度压住不刺眼 ---- */
+  --gold: #d9b96a;
+  --gold-hi: #f4e6c3;
+  --gold-deep: #6f5218;
+  --gold-line: rgba(217, 185, 106, 0.34);
+  --gold-soft: rgba(217, 185, 106, 0.08);
+  --gold-glow: rgba(217, 185, 106, 0.2);
+
+  /* ---- 青金石：只给焦点 / 选中 / 强调数据 ---- */
+  --lapis: #2e4685;
+  --lapis-hi: #6d8bd4;
+  --lapis-line: rgba(109, 139, 212, 0.42);
+  --lapis-soft: rgba(109, 139, 212, 0.1);
+
+  /* ---- 危险与对手 ---- */
+  --oxblood: #7a2b2b;
+  --verdigris: #456b5c;
+
+  /* 羊皮纸只用于印章 / 提示条一类小面积 */
+  --parchment: #e8dcc2;
+  --ink: #16120a;
+
+  --green: #6aab84;
+  --amber: #d9b96a;
+  --red: #c25a5a;
+
+  /* 历史别名 → 新色 */
+  --accent: #d9b96a;
+  --cyan: #6d8bd4;
+  --violet: #d9b96a;
+
+  /* ---- 阴影：接触 / 环境 / 内嵌受光 ---- */
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.72);
+  --shadow-2: 0 26px 64px -34px rgba(0, 0, 0, 0.96);
+  --bevel: inset 0 1px 0 rgba(244, 230, 195, 0.07), inset 0 -1px 0 rgba(0, 0, 0, 0.6);
+  --rim: inset 0 1px 0 rgba(244, 230, 195, 0.06);
+
+  /* ---- 圆角：2 发丝 / 4 控件 / 6 面板 / 10 弹窗 ---- */
+  --radius: 6px;
+  --radius-sm: 4px;
+  --radius-lg: 10px;
+  --shadow: none;
+
+  /* ---- 字号阶梯：正文 14 / 数据 13 / 注释 12 / 极限 11 ---- */
+  --fs-micro: 11px;
+  --fs-xs: 12px;
+  --fs-sm: 13px;
+  --fs-md: 14px;
+  --fs-lg: 16px;
+  --fs-xl: 22px;
+
+  /* ---- 动效：统一缓动，别用会「糊」的 ease-in-out ---- */
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-1: 140ms;
+  --dur-2: 220ms;
+  --dur-3: 420ms;
+
+  --display: "Cinzel", "Noto Serif SC", "Songti SC", "Source Han Serif SC", Georgia, serif;
+  --serif: "Cormorant Garamond", "Noto Serif SC", "Songti SC", "Source Han Serif SC", Georgia, serif;
+  --font:
+    "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Hiragino Sans GB", "Noto Sans SC", "Microsoft YaHei", sans-serif;
+  --mono: "SF Mono", ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace;
+}

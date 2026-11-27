@@ -20,10 +20,10 @@ const TABLE_ROW_H = 38
 const EMPTY_ROW_H = 44
 
 const ACCENT = {
-  starter: '#5fc8ff',
-  effect: '#a78bfa',
-  brick: '#ff7b8a',
-  handtrap: '#f6c86b',
+  starter: '#a8823a',
+  effect: '#a8823a',
+  brick: '#c4564a',
+  handtrap: '#d9a94f',
 }
 
 /** 一个启动组：组内卡名 + 只靠这组达成的概率 */
@@ -111,23 +111,23 @@ function drawSpaced(ctx: CanvasRenderingContext2D, text: string, x: number, y: n
 
 function drawBackdrop(ctx: CanvasRenderingContext2D, width: number, height: number) {
   const bg = ctx.createLinearGradient(0, 0, width * 0.5, height)
-  bg.addColorStop(0, '#070a11')
-  bg.addColorStop(0.5, '#0b1220')
-  bg.addColorStop(1, '#070a12')
+  bg.addColorStop(0, '#0b0806')
+  bg.addColorStop(0.5, '#100d09')
+  bg.addColorStop(1, '#0a0806')
   ctx.fillStyle = bg
   ctx.fillRect(0, 0, width, height)
 
   const cool = ctx.createRadialGradient(width * 0.1, 30, 0, width * 0.1, 30, width)
-  cool.addColorStop(0, 'rgba(86, 190, 255, 0.18)')
-  cool.addColorStop(0.5, 'rgba(86, 190, 255, 0.04)')
-  cool.addColorStop(1, 'rgba(86, 190, 255, 0)')
+  cool.addColorStop(0, 'rgba(194, 162, 75, 0.18)')
+  cool.addColorStop(0.5, 'rgba(194, 162, 75, 0.04)')
+  cool.addColorStop(1, 'rgba(194, 162, 75, 0)')
   ctx.fillStyle = cool
   ctx.fillRect(0, 0, width, height)
 
   const violet = ctx.createRadialGradient(width * 0.9, height * 0.8, 0, width * 0.9, height * 0.8, width * 0.9)
-  violet.addColorStop(0, 'rgba(150, 110, 255, 0.16)')
-  violet.addColorStop(0.6, 'rgba(150, 110, 255, 0.03)')
-  violet.addColorStop(1, 'rgba(150, 110, 255, 0)')
+  violet.addColorStop(0, 'rgba(201, 155, 60, 0.16)')
+  violet.addColorStop(0.6, 'rgba(201, 155, 60, 0.03)')
+  violet.addColorStop(1, 'rgba(201, 155, 60, 0)')
   ctx.fillStyle = violet
   ctx.fillRect(0, 0, width, height)
 
@@ -151,7 +151,7 @@ function drawBackdrop(ctx: CanvasRenderingContext2D, width: number, height: numb
 
 function drawHeader(ctx: CanvasRenderingContext2D, input: RatesPosterInput) {
   ctx.save()
-  ctx.fillStyle = 'rgba(140, 205, 255, 0.62)'
+  ctx.fillStyle = 'rgba(194, 162, 75, 0.62)'
   ctx.font = `600 12px ${MONO}`
   drawSpaced(ctx, 'START RATE', PAD, 72, 4)
 
@@ -163,8 +163,8 @@ function drawHeader(ctx: CanvasRenderingContext2D, input: RatesPosterInput) {
   }
   ctx.font = `700 ${size}px ${FONT}`
   const title = ctx.createLinearGradient(PAD, 0, PAD + 760, 0)
-  title.addColorStop(0, '#f4f9ff')
-  title.addColorStop(1, '#78b6ea')
+  title.addColorStop(0, '#fdf7e9')
+  title.addColorStop(1, '#c2a24b')
   ctx.fillStyle = title
   ctx.fillText(ellipsize(ctx, name, W - PAD * 2 - 300), PAD, 72 + size + 12)
 
@@ -175,12 +175,12 @@ function drawHeader(ctx: CanvasRenderingContext2D, input: RatesPosterInput) {
   const badgeW = ctx.measureText(badge).width + 32
   const badgeY = 72 + size + 34
   roundRect(ctx, PAD, badgeY, badgeW, 36, 18)
-  ctx.fillStyle = 'rgba(95, 200, 255, 0.1)'
+  ctx.fillStyle = 'rgba(194, 162, 75, 0.1)'
   ctx.fill()
-  ctx.strokeStyle = 'rgba(95, 200, 255, 0.32)'
+  ctx.strokeStyle = 'rgba(194, 162, 75, 0.32)'
   ctx.lineWidth = 1
   ctx.stroke()
-  ctx.fillStyle = 'rgba(186, 226, 255, 0.92)'
+  ctx.fillStyle = 'rgba(243, 224, 173, 0.92)'
   ctx.fillText(badge, PAD + 16, badgeY + 24)
 
   // 右侧总启动率
@@ -188,29 +188,29 @@ function drawHeader(ctx: CanvasRenderingContext2D, input: RatesPosterInput) {
   ctx.textAlign = 'right'
   if (main !== null) {
     ctx.font = `700 52px ${MONO}`
-    ctx.fillStyle = 'rgba(236, 246, 255, 0.95)'
+    ctx.fillStyle = 'rgba(248, 241, 226, 0.95)'
     ctx.fillText(percentText(main), W - PAD, 118)
     ctx.font = `500 13px ${FONT}`
-    ctx.fillStyle = 'rgba(150, 190, 225, 0.62)'
+    ctx.fillStyle = 'rgba(201, 155, 60, 0.62)'
     ctx.fillText(input.total !== null ? '含抽滤总启动率' : '起手即启动', W - PAD, 148)
   } else {
     ctx.font = `600 14px ${FONT}`
-    ctx.fillStyle = 'rgba(150, 190, 225, 0.55)'
+    ctx.fillStyle = 'rgba(201, 155, 60, 0.55)'
     ctx.fillText('尚未计算', W - PAD, 110)
   }
 
   // 起手即启动的副数字
   if (input.total !== null && input.opening !== null) {
     ctx.font = `500 14px ${MONO}`
-    ctx.fillStyle = 'rgba(150, 190, 225, 0.62)'
+    ctx.fillStyle = 'rgba(201, 155, 60, 0.62)'
     ctx.fillText(`起手即启动 ${percentText(input.opening)}`, W - PAD, 174)
   }
   ctx.textAlign = 'left'
 
   const line = ctx.createLinearGradient(PAD, 0, W - PAD, 0)
-  line.addColorStop(0, 'rgba(120, 200, 255, 0.5)')
-  line.addColorStop(0.45, 'rgba(120, 200, 255, 0.12)')
-  line.addColorStop(1, 'rgba(150, 110, 255, 0.02)')
+  line.addColorStop(0, 'rgba(194, 162, 75, 0.5)')
+  line.addColorStop(0.45, 'rgba(194, 162, 75, 0.12)')
+  line.addColorStop(1, 'rgba(201, 155, 60, 0.02)')
   ctx.fillStyle = line
   ctx.fillRect(PAD, HEADER_H - 24, W - PAD * 2, 1.5)
   ctx.restore()
@@ -231,14 +231,14 @@ function drawSectionTitle(
   roundRect(ctx, PAD, y + 2, 4, 28, 2)
   ctx.fill()
 
-  ctx.fillStyle = 'rgba(238, 246, 255, 0.94)'
+  ctx.fillStyle = 'rgba(250, 243, 228, 0.94)'
   ctx.font = `600 21px ${FONT}`
   ctx.fillText(title, PAD + 16, y + 24)
   const titleW = ctx.measureText(title).width
 
   if (note) {
     ctx.font = `500 13px ${FONT}`
-    ctx.fillStyle = 'rgba(150, 178, 205, 0.6)'
+    ctx.fillStyle = 'rgba(176, 158, 130, 0.6)'
     ctx.fillText(ellipsize(ctx, note, W - PAD * 2 - titleW - 40), PAD + 28 + titleW, y + 23)
   }
   ctx.restore()
@@ -283,7 +283,7 @@ function drawStarters(ctx: CanvasRenderingContext2D, input: RatesPosterInput, y:
   if (!rows.length) {
     ctx.save()
     ctx.font = `500 15px ${FONT}`
-    ctx.fillStyle = 'rgba(150, 178, 205, 0.5)'
+    ctx.fillStyle = 'rgba(176, 158, 130, 0.5)'
     ctx.fillText('还没有配置启动条件', PAD + 4, cursor + 24)
     ctx.restore()
     return cursor + EMPTY_ROW_H
@@ -293,16 +293,16 @@ function drawStarters(ctx: CanvasRenderingContext2D, input: RatesPosterInput, y:
     ctx.save()
     const top = cursor
     ctx.font = `600 12px ${MONO}`
-    ctx.fillStyle = 'rgba(95, 200, 255, 0.78)'
+    ctx.fillStyle = 'rgba(194, 162, 75, 0.78)'
     ctx.fillText(`启动 ${index + 1}`, PAD, top + 26)
 
     ctx.font = `600 17px ${FONT}`
-    ctx.fillStyle = 'rgba(230, 240, 250, 0.92)'
+    ctx.fillStyle = 'rgba(244, 236, 218, 0.92)'
     ctx.fillText(ellipsize(ctx, row.cards, W - PAD * 2 - 250), PAD + 88, top + 26)
 
     ctx.textAlign = 'right'
     ctx.font = `700 24px ${MONO}`
-    ctx.fillStyle = 'rgba(236, 246, 255, 0.95)'
+    ctx.fillStyle = 'rgba(248, 241, 226, 0.95)'
     ctx.fillText(percentText(row.chance), W - PAD, top + 28)
     ctx.textAlign = 'left'
 
@@ -327,26 +327,26 @@ function drawEffects(ctx: CanvasRenderingContext2D, input: RatesPosterInput, y: 
     ctx.save()
     const top = cursor
     ctx.font = `600 12px ${MONO}`
-    ctx.fillStyle = 'rgba(167, 139, 250, 0.8)'
+    ctx.fillStyle = 'rgba(194, 162, 75, 0.8)'
     ctx.fillText(`${index + 1}`, PAD, top + 20)
 
     ctx.font = `600 17px ${FONT}`
-    ctx.fillStyle = 'rgba(230, 240, 250, 0.92)'
+    ctx.fillStyle = 'rgba(244, 236, 218, 0.92)'
     ctx.fillText(ellipsize(ctx, effect.name || '假想效果', W - PAD * 2 - 220), PAD + 26, top + 20)
 
     if (effect.detail) {
       ctx.font = `500 12.5px ${FONT}`
-      ctx.fillStyle = 'rgba(150, 178, 205, 0.6)'
+      ctx.fillStyle = 'rgba(176, 158, 130, 0.6)'
       ctx.fillText(ellipsize(ctx, effect.detail, W - PAD * 2 - 220), PAD + 26, top + 40)
     }
 
     ctx.textAlign = 'right'
     ctx.font = `700 19px ${MONO}`
     if (effect.gain === null) {
-      ctx.fillStyle = 'rgba(150, 178, 205, 0.45)'
+      ctx.fillStyle = 'rgba(176, 158, 130, 0.45)'
       ctx.fillText('—', W - PAD, top + 26)
     } else {
-      ctx.fillStyle = effect.gain > 0.0005 ? '#5fe3a1' : 'rgba(150, 178, 205, 0.5)'
+      ctx.fillStyle = effect.gain > 0.0005 ? '#6fae7d' : 'rgba(176, 158, 130, 0.5)'
       ctx.fillText(
         effect.gain > 0.0005 ? `+${(effect.gain * 100).toFixed(2)}pp` : '无新增',
         W - PAD,
@@ -376,14 +376,14 @@ function drawHandTable(
   hand.rows.forEach((row) => {
     ctx.save()
     ctx.font = `500 14px ${FONT}`
-    ctx.fillStyle = 'rgba(200, 216, 232, 0.78)'
+    ctx.fillStyle = 'rgba(220, 206, 182, 0.78)'
     ctx.fillText(`恰好 ${row.k} 张`, PAD, cursor + 19)
 
     drawBar(ctx, PAD + 96, cursor + 12, W - PAD * 2 - 96 - 92, 7, row.p, accent)
 
     ctx.textAlign = 'right'
     ctx.font = `600 15px ${MONO}`
-    ctx.fillStyle = 'rgba(226, 238, 248, 0.9)'
+    ctx.fillStyle = 'rgba(240, 232, 214, 0.9)'
     ctx.fillText(percentText(row.p), W - PAD, cursor + 20)
     ctx.textAlign = 'left'
     ctx.restore()
@@ -397,7 +397,7 @@ function drawHandTable(
   ctx.fillStyle = 'rgba(255, 255, 255, 0.035)'
   ctx.fill()
   ctx.font = `600 15px ${FONT}`
-  ctx.fillStyle = 'rgba(226, 238, 248, 0.9)'
+  ctx.fillStyle = 'rgba(240, 232, 214, 0.9)'
   ctx.fillText(`至少上手 1 张（共 ${hand.count} 张）`, PAD + 18, top + 33)
   ctx.textAlign = 'right'
   ctx.font = `700 24px ${MONO}`
@@ -420,21 +420,21 @@ function drawFooter(ctx: CanvasRenderingContext2D, height: number, input: RatesP
   ctx.stroke()
 
   ctx.font = `600 13px ${FONT}`
-  ctx.fillStyle = 'rgba(150, 205, 245, 0.75)'
+  ctx.fillStyle = 'rgba(240, 211, 138, 0.75)'
   ctx.fillText('ygo-combo', PAD, y + 44)
   ctx.font = `400 12px ${FONT}`
-  ctx.fillStyle = 'rgba(160, 180, 200, 0.42)'
+  ctx.fillStyle = 'rgba(178, 163, 138, 0.42)'
   ctx.fillText('启动率推算', PAD + 76, y + 44)
 
   ctx.textAlign = 'right'
-  ctx.fillStyle = 'rgba(160, 180, 200, 0.4)'
+  ctx.fillStyle = 'rgba(178, 163, 138, 0.4)'
   if (input.method) ctx.fillText(input.method, W - PAD, y + 36)
   const stamp = new Date().toLocaleDateString('zh-CN', {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
   })
-  ctx.fillStyle = 'rgba(160, 180, 200, 0.28)'
+  ctx.fillStyle = 'rgba(178, 163, 138, 0.28)'
   ctx.fillText(stamp, W - PAD, y + 58)
   ctx.textAlign = 'left'
   ctx.restore()

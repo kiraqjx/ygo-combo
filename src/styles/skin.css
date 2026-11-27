@@ -1,0 +1,1106 @@
+/*
+ * 千年鎏金 · 皮肤层
+ * 只做视觉：边框、金属、字体、纹理、动效。不改任何布局与尺寸逻辑。
+ * 加载顺序在 style.css 之后，因此同名选择器直接覆盖（同权重靠后即生效）。
+ */
+
+/* ================================================================
+   1. 骨架：顶栏 / 导航 / 页脚
+   ================================================================ */
+
+.site-header {
+  backdrop-filter: blur(20px) saturate(140%);
+  background: linear-gradient(180deg, rgba(9, 9, 15, 0.9), rgba(7, 7, 12, 0.78));
+  border-bottom: 1px solid var(--hairline);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.5);
+}
+
+/* 顶栏下沿只留一根金线：2px 的双线会显廉价 */
+.site-header::after {
+  height: 1px;
+  bottom: -1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(217, 185, 106, 0.4) 26%,
+    rgba(244, 230, 195, 0.55) 50%,
+    rgba(217, 185, 106, 0.4) 74%,
+    transparent
+  );
+  opacity: 0.5;
+}
+
+.header-inner {
+  height: 64px;
+}
+
+.brand {
+  gap: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.brand > span:last-child {
+  font-family: var(--display);
+  font-size: 15.5px;
+  letter-spacing: 0.1em;
+  color: var(--parchment);
+}
+
+/* 卡背菱形：方形描边 + 内嵌菱形，替代原来的圆角三角标 */
+.brand-mark {
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(217, 185, 106, 0.46);
+  background:
+    radial-gradient(130% 130% at 30% 0%, rgba(217, 185, 106, 0.14), transparent 60%),
+    var(--panel);
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.72),
+    inset 0 1px 0 rgba(244, 230, 195, 0.14);
+  color: var(--gold-hi);
+}
+
+.brand small {
+  font-size: 11px;
+  letter-spacing: 0.28em;
+  color: var(--text-mute);
+}
+
+.nav {
+  gap: 2px;
+}
+
+/* 导航改成「卡名条」式下划线，不再是胶囊 */
+.nav a {
+  position: relative;
+  padding: 8px 13px;
+  border-radius: 0;
+  border: 0;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  color: var(--text-mute);
+  background: none;
+}
+
+.nav a::after {
+  content: "";
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 4px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--gold), transparent);
+  opacity: 0;
+  transform: scaleX(0.4);
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.nav a:hover {
+  color: var(--text);
+  background: none;
+}
+
+.nav a:hover::after {
+  opacity: 0.45;
+  transform: scaleX(1);
+}
+
+.nav a.router-link-active {
+  color: var(--gold-hi);
+  background: none;
+  border: 0;
+  text-shadow: 0 0 22px rgba(217, 185, 106, 0.18);
+}
+
+.nav a.router-link-active::after {
+  opacity: 1;
+  transform: scaleX(1);
+}
+
+.site-foot {
+  border-top: 1px solid rgba(217, 185, 106, 0.12);
+  background: rgba(7, 7, 12, 0.6);
+}
+
+.foot-inner {
+  color: var(--text-mute);
+  letter-spacing: 0.02em;
+}
+
+/* ================================================================
+   2. 文字：标题用衬线，数据用等宽
+   ================================================================ */
+
+/* 刻字：上沿一道冷光、下沿一道深影，做出「凿进石面」的落差 */
+h1,
+h2,
+.section-head h2 {
+  font-family: var(--display);
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--text);
+  text-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.9),
+    0 -1px 0 rgba(244, 230, 195, 0.05);
+}
+
+.panel-title,
+.label,
+.field > label {
+  font-family: var(--display);
+  letter-spacing: 0.18em;
+  font-weight: 600;
+}
+
+.panel-title {
+  color: var(--parchment);
+  font-size: 11.5px;
+}
+
+/* 卡名条左端的那根短金柱 */
+.panel-title::before {
+  content: "";
+  flex: none;
+  width: 3px;
+  height: 12px;
+  border-radius: 1px;
+  background: linear-gradient(180deg, var(--gold-hi), var(--gold-deep));
+  box-shadow: 0 0 10px rgba(217, 185, 106, 0.55);
+}
+
+::selection {
+  background: rgba(217, 185, 106, 0.32);
+  color: var(--parchment);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(217, 185, 106, 0.22);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(217, 185, 106, 0.36);
+}
+
+/* ================================================================
+   3. 按钮 / 输入 / 胶囊
+   ================================================================ */
+
+/*
+ * 次级按钮：黑曜石哑光板。
+ * 高级感来自「一块平整的深色 + 一道上沿受光」，不是叠加纹理。
+ */
+.btn {
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(217, 185, 106, 0.18);
+  background: linear-gradient(180deg, rgba(27, 27, 40, 0.9), rgba(12, 12, 19, 0.95));
+  color: var(--text-dim);
+  box-shadow:
+    var(--rim),
+    var(--shadow-1);
+  letter-spacing: 0.03em;
+}
+
+.btn:hover {
+  background: linear-gradient(180deg, rgba(38, 38, 54, 0.95), rgba(16, 16, 25, 0.96));
+  border-color: rgba(217, 185, 106, 0.44);
+  color: var(--gold-hi);
+  box-shadow:
+    inset 0 1px 0 rgba(244, 230, 195, 0.1),
+    0 12px 28px -22px #000;
+}
+
+/* 主按钮：整块金箔，四周一圈更亮的滚边，去掉外发光 */
+.btn.primary {
+  border-color: rgba(244, 230, 195, 0.55);
+  background: linear-gradient(180deg, #f8eed4 0%, #ddc07c 36%, #c3a057 64%, #a8843c 100%);
+  color: #16110a;
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.6),
+    inset 0 -1px 0 rgba(74, 52, 12, 0.38),
+    0 12px 30px -20px rgba(217, 185, 106, 0.5);
+}
+
+.btn.primary:hover {
+  background: linear-gradient(180deg, #fdf5e2 0%, #e6cb8b 36%, #cdab63 64%, #b28f45 100%);
+  color: #100c06;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.7),
+    inset 0 -1px 0 rgba(74, 52, 12, 0.35),
+    0 14px 34px -20px rgba(217, 185, 106, 0.6);
+}
+
+.btn.sm,
+.btn.xs {
+  border-radius: 3px;
+}
+
+.btn.ghost {
+  background: transparent;
+  border-color: rgba(217, 185, 106, 0.2);
+  color: var(--text-dim);
+}
+
+.btn.ghost:hover {
+  background: rgba(217, 185, 106, 0.08);
+  color: var(--gold-hi);
+}
+
+.icon-btn {
+  border-radius: 3px;
+  border-color: rgba(217, 185, 106, 0.2);
+}
+
+.input,
+.select,
+.textarea {
+  border-radius: 3px;
+  border-color: rgba(217, 185, 106, 0.18);
+  background: rgba(5, 5, 9, 0.55);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+.input:focus,
+.select:focus,
+.textarea:focus {
+  border-color: rgba(217, 185, 106, 0.55);
+  box-shadow:
+    inset 0 1px 2px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(217, 185, 106, 0.28);
+}
+
+/* 胶囊类：小金属牌，左边一条色带 */
+.chip {
+  border-radius: 3px;
+  border-color: rgba(217, 185, 106, 0.22);
+  background: linear-gradient(180deg, rgba(28, 28, 36, 0.7), rgba(13, 13, 20, 0.7));
+  color: var(--text-dim);
+  letter-spacing: 0.03em;
+}
+
+.chip:hover {
+  border-color: rgba(217, 185, 106, 0.45);
+  color: var(--parchment);
+}
+
+.seg {
+  border-radius: 3px;
+  border-color: rgba(217, 185, 106, 0.2);
+  background: rgba(5, 5, 9, 0.5);
+}
+
+.seg button {
+  border-radius: 2px;
+}
+
+/* ================================================================
+   4. 面板 = 卡框
+   ================================================================ */
+
+.panel {
+  position: relative;
+  border-radius: var(--radius);
+  border: 1px solid rgba(217, 185, 106, 0.24);
+  background:
+    linear-gradient(180deg, rgba(32, 26, 18, 0.9), rgba(16, 13, 9, 0.94));
+  backdrop-filter: none;
+  box-shadow:
+    inset 0 1px 0 rgba(244, 230, 195, 0.06),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.45),
+    0 18px 40px -34px #000;
+}
+
+/* 内侧再收一条线，做出实卡的双线框 */
+.panel::before {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  border: 1px solid rgba(217, 185, 106, 0.1);
+  border-radius: 2px;
+  pointer-events: none;
+}
+
+/* 四角 L 形角饰：8 条渐变拼出来，不需要图片 */
+.panel::after {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  pointer-events: none;
+  background:
+    linear-gradient(var(--gold-line), var(--gold-line)) left top / 12px 1px no-repeat,
+    linear-gradient(var(--gold-line), var(--gold-line)) left top / 1px 12px no-repeat,
+    linear-gradient(var(--gold-line), var(--gold-line)) right top / 12px 1px no-repeat,
+    linear-gradient(var(--gold-line), var(--gold-line)) right top / 1px 12px no-repeat,
+    linear-gradient(var(--gold-line), var(--gold-line)) left bottom / 12px 1px no-repeat,
+    linear-gradient(var(--gold-line), var(--gold-line)) left bottom / 1px 12px no-repeat,
+    linear-gradient(var(--gold-line), var(--gold-line)) right bottom / 12px 1px no-repeat,
+    linear-gradient(var(--gold-line), var(--gold-line)) right bottom / 1px 12px no-repeat;
+  opacity: 0.55;
+}
+
+.panel-head {
+  position: relative;
+  border-bottom: 1px solid rgba(217, 185, 106, 0.16);
+  background:
+    linear-gradient(180deg, rgba(217, 185, 106, 0.08), rgba(217, 185, 106, 0));
+}
+
+.panel-body {
+  position: relative;
+}
+
+.divider {
+  background: linear-gradient(90deg, transparent, rgba(217, 185, 106, 0.22), transparent);
+}
+
+/* 页面标题旁的小标签 */
+.eyebrow {
+  border-radius: 2px;
+  border-color: rgba(217, 185, 106, 0.32);
+  background: rgba(217, 185, 106, 0.07);
+  color: var(--gold);
+  letter-spacing: 0.2em;
+}
+
+/* ================================================================
+   5. 卡牌格：稀有度感的全息扫光
+   ================================================================ */
+
+.card-img {
+  border-radius: 4px;
+  border: 1px solid rgba(217, 185, 106, 0.22);
+  background:
+    linear-gradient(160deg, rgba(28, 28, 36, 0.9), rgba(7, 7, 12, 0.95));
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.6),
+    inset 0 1px 0 rgba(244, 230, 195, 0.08);
+}
+
+.card-img::after {
+  content: "";
+  position: absolute;
+  inset: -20%;
+  pointer-events: none;
+  background: linear-gradient(
+    112deg,
+    transparent 38%,
+    rgba(255, 255, 255, 0.1) 46%,
+    rgba(244, 230, 195, 0.28) 50%,
+    rgba(255, 255, 255, 0.08) 54%,
+    transparent 62%
+  );
+  transform: translateX(-70%);
+  opacity: 0;
+  transition: transform 0.75s ease, opacity 0.3s ease;
+}
+
+.card-tile:hover .card-img {
+  border-color: rgba(217, 185, 106, 0.6);
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.6),
+    0 0 0 1px rgba(217, 185, 106, 0.2),
+    0 18px 36px -24px #000;
+}
+
+.card-tile:hover .card-img::after {
+  opacity: 1;
+  transform: translateX(70%);
+}
+
+.card-tile:hover .card-name {
+  color: var(--parchment);
+}
+
+.card-name {
+  letter-spacing: 0.01em;
+}
+
+.card-badge {
+  border-radius: 2px;
+  border-color: rgba(217, 185, 106, 0.32);
+  background: rgba(8, 8, 13, 0.82);
+  color: var(--parchment);
+  letter-spacing: 0.04em;
+}
+
+.card-badge.level {
+  color: var(--gold-hi);
+  border-color: rgba(217, 185, 106, 0.5);
+}
+
+.empty {
+  border: 1px dashed rgba(217, 185, 106, 0.22);
+  border-radius: var(--radius);
+  color: var(--text-mute);
+}
+
+/* ================================================================
+   6. 弹窗 / 抽屉 / 提示
+   ================================================================ */
+
+.overlay {
+  backdrop-filter: blur(3px);
+  background: rgba(6, 4, 2, 0.62);
+}
+
+.modal,
+.drawer {
+  border-radius: var(--radius);
+  border: 1px solid rgba(217, 185, 106, 0.3);
+  background:
+    linear-gradient(180deg, rgba(34, 27, 19, 0.98), rgba(15, 12, 8, 0.99));
+  backdrop-filter: none;
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.5),
+    0 40px 90px -40px #000;
+}
+
+.modal-head,
+.drawer-head {
+  border-bottom: 1px solid rgba(217, 185, 106, 0.18);
+  background: linear-gradient(180deg, rgba(217, 185, 106, 0.09), transparent);
+  font-family: var(--display);
+  letter-spacing: 0.08em;
+}
+
+.modal-foot {
+  border-top: 1px solid rgba(217, 185, 106, 0.14);
+}
+
+/* 提示条做成一张小卡：羊皮纸 + 深墨字 */
+.toast {
+  border-radius: 3px;
+  border: 1px solid rgba(217, 185, 106, 0.55);
+  background: linear-gradient(180deg, #efe2c2, #ddcba6);
+  color: #2a2115;
+  font-weight: 500;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.6),
+    0 16px 40px -22px #000;
+}
+
+.toast.err {
+  border-color: rgba(194, 90, 90, 0.7);
+  background: linear-gradient(180deg, #efcdc2, #dfb3a4);
+  color: #3a1712;
+}
+
+/* ================================================================
+   7. 数据区：账本风格的表与统计
+   ================================================================ */
+
+.panel-body table,
+.rate-table,
+table.data {
+  border-collapse: collapse;
+}
+
+.panel-body th {
+  font-family: var(--display);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  color: var(--text-mute);
+  border-bottom: 1px solid rgba(217, 185, 106, 0.28);
+}
+
+.panel-body td {
+  border-bottom: 1px solid rgba(217, 185, 106, 0.08);
+}
+
+.stat {
+  border-radius: var(--radius);
+  border-color: rgba(217, 185, 106, 0.2);
+  background: linear-gradient(160deg, rgba(28, 28, 36, 0.55), rgba(10, 10, 16, 0.6));
+}
+
+.stat .k {
+  font-family: var(--display);
+  color: var(--gold-hi);
+  letter-spacing: 0.04em;
+}
+
+.feature {
+  border-radius: var(--radius);
+  border-color: rgba(217, 185, 106, 0.2);
+  background: linear-gradient(165deg, rgba(28, 28, 36, 0.5), rgba(10, 10, 16, 0.55));
+}
+
+.feature:hover {
+  border-color: rgba(217, 185, 106, 0.42);
+}
+
+.feature .idx,
+.feature li::before {
+  color: var(--gold);
+}
+
+.feature .glow {
+  background: radial-gradient(circle, rgba(217, 185, 106, 0.16), transparent 70%);
+}
+
+/* ================================================================
+   8. 首页：卡背几何纹 + 金线
+   ================================================================ */
+
+.home {
+  --home-cyan: var(--gold);
+  --home-violet: var(--gold-hi);
+  --home-pink: #a8552f;
+  --home-line: rgba(217, 185, 106, 0.2);
+  --home-ink: rgba(226, 214, 190, 0.68);
+}
+
+/*
+ * 主视觉：菱形阵列（卡背纹）+ 原图。
+ * sepia 从 0.26 降到 0.08 —— 褐色滤镜才是「旧照片」感的来源，
+ * 换成低饱和 + 高对比 + 压暗，才是「深」。
+ */
+.home-bg {
+  inset: -96px 0 auto 0;
+  height: min(700px, 82vh);
+  background:
+    repeating-linear-gradient(45deg, rgba(217, 185, 106, 0.05) 0 1px, transparent 1px 30px),
+    repeating-linear-gradient(-45deg, rgba(217, 185, 106, 0.05) 0 1px, transparent 1px 30px),
+    radial-gradient(72% 62% at 76% 16%, rgba(217, 185, 106, 0.16), transparent 64%),
+    url('/home-duel-bg.jpg') center 16% / cover no-repeat,
+    #08080e;
+  background-blend-mode: normal;
+  opacity: 1;
+  filter: saturate(0.72) sepia(0.08) brightness(0.68) contrast(1.16);
+  mask-image: linear-gradient(180deg, #000 0%, #000 52%, transparent 100%);
+  -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 52%, transparent 100%);
+  animation: none;
+}
+
+/* 左侧压到接近纯黑保证标题可读，右侧只留一点金晕 */
+.home-veil {
+  inset: -24px 0 auto 0;
+  height: min(700px, 82vh);
+  background:
+    linear-gradient(
+      96deg,
+      #07070c 0%,
+      rgba(7, 7, 12, 0.94) 30%,
+      rgba(7, 7, 12, 0.28) 60%,
+      rgba(7, 7, 12, 0.78) 100%
+    ),
+    radial-gradient(58% 48% at 82% 66%, rgba(217, 185, 106, 0.1), transparent 72%),
+    radial-gradient(46% 40% at 70% 4%, rgba(109, 139, 212, 0.1), transparent 70%);
+}
+
+/* 光锥：一束冷金从右上斜切下来，是页面唯一的高光 */
+.home-aurora {
+  inset: -240px -80px auto -80px;
+  height: 720px;
+  background:
+    conic-gradient(from 210deg at 72% 0%, transparent 0deg, rgba(217, 185, 106, 0.12) 32deg, transparent 72deg),
+    radial-gradient(42% 40% at 76% 6%, rgba(244, 230, 195, 0.1), transparent 74%);
+  opacity: 0.85;
+}
+
+/* 星点位改成极淡的金粉，只在光锥范围内可见 */
+.home-stars {
+  opacity: 0.16;
+  background-image: radial-gradient(circle, rgba(244, 230, 195, 0.9) 0.6px, transparent 1.1px);
+  background-size: 56px 56px;
+  background-position: 0 0;
+  mask-image: radial-gradient(64% 56% at 68% 18%, #000 0%, transparent 74%);
+  -webkit-mask-image: radial-gradient(64% 56% at 68% 18%, #000 0%, transparent 74%);
+}
+
+.home-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--gold);
+  font-family: var(--display);
+  font-size: 11px;
+  letter-spacing: 0.42em;
+  text-shadow: none;
+}
+
+.home-eyebrow::before,
+.home-eyebrow::after {
+  content: "";
+  width: 26px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(217, 185, 106, 0.7));
+}
+
+.home-eyebrow::after {
+  background: linear-gradient(270deg, transparent, rgba(217, 185, 106, 0.7));
+}
+
+.home-title {
+  margin-top: 18px;
+}
+
+/*
+ * DUEL：衬线大字 + 金箔渐变 + 刻痕投影。
+ * 渐变必须有「亮帽 → 中段金 → 暗底 → 再回光」的起伏，
+ * 单一亮到暗会看起来像塑料贴纸。
+ */
+.home-title-main {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: clamp(58px, 10.4vw, 128px);
+  letter-spacing: 0.1em;
+  line-height: 0.94;
+  background: linear-gradient(
+    176deg,
+    #fffaf0 0%,
+    #f7e6c0 18%,
+    #d9b96a 42%,
+    #9d7a2e 62%,
+    #e8cd8c 78%,
+    #7a5a1c 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter:
+    drop-shadow(0 1px 0 rgba(0, 0, 0, 0.9))
+    drop-shadow(0 24px 56px rgba(217, 185, 106, 0.16));
+}
+
+/* 副标题用衬线正体、字距收紧，和「DUEL」形成「标题 / 题记」的关系 */
+.home-title-sub {
+  margin-top: 22px;
+  font-family: var(--serif);
+  font-size: clamp(17px, 1.9vw, 24px);
+  font-weight: 400;
+  letter-spacing: 0.14em;
+  color: var(--text-dim);
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.6);
+}
+
+.home-actions .btn.primary {
+  border-color: rgba(244, 230, 195, 0.7);
+  background: linear-gradient(180deg, #f4e6c3 0%, #d9b96a 46%, #b8933f 100%);
+  color: #241d13;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.6),
+    inset 0 -1px 0 rgba(84, 56, 10, 0.45),
+    0 14px 34px -18px rgba(217, 185, 106, 0.8);
+}
+
+.home-actions .btn.primary:hover {
+  filter: brightness(1.05);
+}
+
+.home-ticker {
+  border-radius: 2px;
+  border-color: rgba(217, 185, 106, 0.22);
+  background: rgba(8, 8, 13, 0.66);
+  backdrop-filter: blur(6px);
+  color: var(--text-dim);
+  letter-spacing: 0.04em;
+}
+
+.home-pulse {
+  background: var(--gold-hi);
+  box-shadow: 0 0 10px rgba(217, 185, 106, 0.85);
+}
+
+@keyframes home-pulse-gold {
+  0% {
+    box-shadow: 0 0 0 0 rgba(217, 185, 106, 0.5);
+  }
+  70% {
+    box-shadow: 0 0 0 7px rgba(217, 185, 106, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(217, 185, 106, 0);
+  }
+}
+
+.home-pulse {
+  animation: home-pulse-gold 2.4s ease-out infinite;
+}
+
+/* 首页入口卡：发丝金框 + 顶部一道受光，悬停只提亮边框不再发光 */
+.home-entry {
+  border-radius: var(--radius);
+  border: 1px solid rgba(217, 185, 106, 0.16);
+  background:
+    radial-gradient(120% 90% at 50% -20%, rgba(109, 139, 212, 0.06), transparent 58%),
+    linear-gradient(158deg, rgba(28, 28, 36, 0.92) 0%, rgba(11, 11, 17, 0.94) 100%);
+  backdrop-filter: none;
+  box-shadow:
+    inset 0 1px 0 rgba(244, 230, 195, 0.05),
+    0 18px 40px -34px #000;
+}
+
+.home-entry::before {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(244, 230, 195, 0.45), transparent);
+}
+
+.home-entry::after {
+  background: radial-gradient(circle, rgba(217, 185, 106, 0.14), transparent 70%);
+}
+
+.home-entry:hover {
+  transform: translateY(-3px);
+  border-color: rgba(217, 185, 106, 0.42);
+  box-shadow:
+    0 26px 52px -32px #000,
+    0 0 0 1px rgba(217, 185, 106, 0.1);
+}
+
+.home-entry-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(217, 185, 106, 0.28);
+  background:
+    radial-gradient(120% 120% at 30% 0%, rgba(217, 185, 106, 0.14), transparent 62%),
+    rgba(9, 9, 15, 0.9);
+  color: var(--gold-hi);
+}
+
+.home-entry:nth-child(2n) .home-entry-icon {
+  border-color: rgba(217, 185, 106, 0.28);
+  color: var(--gold);
+}
+
+.home-entry-title {
+  font-family: var(--display);
+  letter-spacing: 0.08em;
+  color: var(--parchment);
+}
+
+.home-entry-note {
+  color: var(--text-mute);
+}
+
+.home-stats {
+  border-top: 1px solid rgba(217, 185, 106, 0.16);
+}
+
+.home-stat b {
+  font-family: var(--display);
+  color: var(--gold-hi);
+  letter-spacing: 0.06em;
+}
+
+.home-stat:nth-child(2) b {
+  color: var(--gold);
+}
+
+.home-stat:nth-child(3) b {
+  color: #a8552f;
+}
+
+/* ================================================================
+   9. 对战区：决斗盘 / 卡位
+   ================================================================ */
+
+.duel-mat {
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(217, 185, 106, 0.16);
+  background:
+    repeating-linear-gradient(90deg, rgba(217, 185, 106, 0.022) 0 1px, transparent 1px 44px),
+    radial-gradient(80% 60% at 50% 0%, rgba(109, 139, 212, 0.05), transparent 62%),
+    linear-gradient(180deg, #0f0f17, #07070c);
+  box-shadow: inset 0 0 60px rgba(0, 0, 0, 0.72);
+}
+
+.duel-zone-name,
+.duel-zone-count {
+  font-family: var(--display);
+  letter-spacing: 0.06em;
+}
+
+.duel-zone-row.changed .duel-zone-name,
+.duel-zone-row.changed .duel-zone-count {
+  color: var(--gold-hi);
+}
+
+.duel-slot {
+  --slot-fill: rgba(217, 185, 106, 0.04);
+}
+
+.duel-slot:hover::before {
+  background: rgba(217, 185, 106, 0.5);
+}
+
+.duel-slot.filled {
+  --slot-line: rgba(217, 185, 106, 0.38);
+}
+
+.duel-badge {
+  border-radius: 2px;
+  background: linear-gradient(180deg, #f4e6c3, #d9b96a);
+  color: #241d13;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+}
+
+.duel-slot-back {
+  border: 1px solid rgba(217, 185, 106, 0.4);
+  box-shadow: inset 0 0 12px rgba(0, 0, 0, 0.8);
+}
+
+.duel-error,
+.duel-warn {
+  border-radius: 3px;
+  letter-spacing: 0.02em;
+}
+
+/* ================================================================
+   10. 浅色：实卡白面
+   ================================================================ */
+
+[data-theme="light"] .site-header {
+  background: linear-gradient(180deg, rgba(255, 253, 246, 0.97), rgba(246, 240, 226, 0.94));
+  border-bottom-color: rgba(143, 109, 36, 0.26);
+}
+
+[data-theme="light"] .brand > span:last-child {
+  color: #2a2115;
+}
+
+[data-theme="light"] .panel,
+[data-theme="light"] .modal,
+[data-theme="light"] .drawer {
+  border-color: rgba(143, 109, 36, 0.32);
+  background: linear-gradient(180deg, #fffdf6, #faf4e6);
+  box-shadow:
+    0 14px 34px -30px rgba(60, 44, 20, 0.5),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.8);
+}
+
+[data-theme="light"] .panel-head {
+  background: linear-gradient(180deg, rgba(143, 109, 36, 0.08), transparent);
+}
+
+[data-theme="light"] .panel-title {
+  color: #5f4614;
+}
+
+[data-theme="light"] .btn {
+  border-color: rgba(143, 109, 36, 0.3);
+  background: linear-gradient(180deg, #fffdf6, #f2e9d5);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    inset 0 -1px 0 rgba(143, 109, 36, 0.12);
+}
+
+[data-theme="light"] .btn:hover {
+  background: linear-gradient(180deg, #fffdf6, #eee0c2);
+  border-color: rgba(143, 109, 36, 0.55);
+  color: #5f4614;
+}
+
+[data-theme="light"] .btn.primary {
+  background: linear-gradient(180deg, #d7b471, #b8933f 48%, #a87e28);
+  border-color: rgba(120, 88, 22, 0.55);
+  color: #fdf8ea;
+}
+
+[data-theme="light"] .input,
+[data-theme="light"] .select,
+[data-theme="light"] .textarea {
+  background: #fffdf6;
+  border-color: rgba(143, 109, 36, 0.28);
+  box-shadow: inset 0 1px 2px rgba(120, 92, 40, 0.1);
+}
+
+[data-theme="light"] .home-bg {
+  opacity: 1;
+  filter: saturate(0.8) sepia(0.2) contrast(1.04) brightness(1.04);
+}
+
+[data-theme="light"] .home-veil {
+  background:
+    linear-gradient(
+      96deg,
+      #f4eee1 0%,
+      rgba(244, 238, 225, 0.95) 30%,
+      rgba(244, 238, 225, 0.4) 60%,
+      rgba(244, 238, 225, 0.75) 100%
+    ),
+    radial-gradient(60% 50% at 82% 66%, rgba(143, 109, 36, 0.1), transparent 70%);
+}
+
+[data-theme="light"] .home-title-main {
+  background: linear-gradient(178deg, #6d521a 0%, #b8933f 38%, #5f4614 78%, #b8933f 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  filter: drop-shadow(0 1px 0 rgba(255, 255, 255, 0.7));
+}
+
+[data-theme="light"] .home-entry {
+  background: linear-gradient(158deg, #fffdf6 0%, #f7f0df 100%);
+  border-color: rgba(143, 109, 36, 0.26);
+  box-shadow: 0 10px 26px -24px rgba(60, 44, 20, 0.5);
+}
+
+[data-theme="light"] .home-entry-title {
+  color: #2a2115;
+}
+
+[data-theme="light"] .home-ticker {
+  background: rgba(255, 253, 246, 0.8);
+  color: #4a3f2e;
+}
+
+[data-theme="light"] .card-img {
+  border-color: rgba(143, 109, 36, 0.28);
+}
+
+[data-theme="light"] .toast {
+  color: #2a2115;
+}
+
+/* ================================================================
+   11. 展开链 / 启动率：小牌化的容器
+   ================================================================ */
+
+.flow-panel {
+  border-color: rgba(217, 185, 106, 0.2);
+  background: linear-gradient(180deg, rgba(34, 26, 17, 0.72), rgba(10, 10, 16, 0.8));
+  backdrop-filter: none;
+}
+
+.chain-block {
+  border-radius: 3px;
+  border-color: rgba(217, 185, 106, 0.14);
+  background: rgba(217, 185, 106, 0.03);
+}
+
+.rate-group {
+  border-radius: 3px;
+  border-color: rgba(217, 185, 106, 0.16);
+  background: rgba(217, 185, 106, 0.03);
+}
+
+.rate-chip {
+  border-radius: 3px;
+  border-color: rgba(217, 185, 106, 0.24);
+  background: linear-gradient(180deg, rgba(28, 28, 36, 0.72), rgba(13, 13, 20, 0.72));
+}
+
+.rate-group-title,
+.step-idx {
+  font-family: var(--display);
+  letter-spacing: 0.08em;
+}
+
+.rate-group-chance {
+  color: var(--gold-hi);
+}
+
+[data-theme="light"] .flow-panel {
+  border-color: rgba(143, 109, 36, 0.24);
+  background: linear-gradient(180deg, #fffdf6, #f7f0e0);
+}
+
+[data-theme="light"] .chain-block,
+[data-theme="light"] .rate-group {
+  border-color: rgba(143, 109, 36, 0.2);
+  background: rgba(143, 109, 36, 0.05);
+}
+
+[data-theme="light"] .rate-chip {
+  border-color: rgba(143, 109, 36, 0.26);
+  background: linear-gradient(180deg, #fffdf6, #f4ecda);
+}
+
+/* ================================================================
+   12. 检索条 / 分段控件
+   ================================================================ */
+
+.search-bar {
+  border-color: rgba(217, 185, 106, 0.22);
+  border-radius: var(--radius);
+  background:
+    linear-gradient(120deg, rgba(217, 185, 106, 0.06), rgba(217, 185, 106, 0.015));
+  box-shadow: inset 0 1px 0 rgba(244, 230, 195, 0.05);
+}
+
+.search-input {
+  letter-spacing: 0.02em;
+}
+
+.seg {
+  border-radius: 3px;
+  border-color: rgba(217, 185, 106, 0.2);
+}
+
+.seg button.on {
+  border-radius: 2px;
+  background: linear-gradient(180deg, rgba(217, 185, 106, 0.2), rgba(217, 185, 106, 0.1));
+  color: var(--gold-hi);
+  box-shadow: inset 0 0 0 1px rgba(217, 185, 106, 0.28);
+}
+
+.chip.on {
+  color: var(--gold-hi);
+  box-shadow: inset 0 0 0 1px rgba(217, 185, 106, 0.2);
+}
+
+[data-theme="light"] .search-bar {
+  border-color: rgba(143, 109, 36, 0.24);
+  background: linear-gradient(120deg, rgba(143, 109, 36, 0.07), rgba(143, 109, 36, 0.02));
+}
+
+[data-theme="light"] .seg button.on {
+  background: linear-gradient(180deg, #f4e6c6, #efe0bd);
+  color: #5f4614;
+}
+
+/* 浅色下的胶囊与图标：暗色渐变在羊皮纸上会糊成一块黑板 */
+[data-theme="light"] .chip {
+  border-color: rgba(143, 109, 36, 0.28);
+  background: linear-gradient(180deg, #fffdf6, #f6efdd);
+  color: #4a3f2e;
+}
+
+[data-theme="light"] .chip.gold,
+[data-theme="light"] .chip.on {
+  color: #5f4614;
+  border-color: rgba(143, 109, 36, 0.42);
+  background: rgba(143, 109, 36, 0.12);
+}
+
+[data-theme="light"] .home-entry-icon {
+  border-color: rgba(143, 109, 36, 0.4);
+  background: linear-gradient(150deg, #fffdf6, #f2e7cc);
+  color: #5f4614;
+}
+
+[data-theme="light"] .home-entry:nth-child(2n) .home-entry-icon {
+  color: #8a6220;
+}
+
+[data-theme="light"] .home-bg {
+  opacity: 0.94;
+  filter: saturate(0.72) sepia(0.24) contrast(1.02) brightness(0.98);
+}
+
+[data-theme="light"] .home-veil {
+  background:
+    linear-gradient(
+      96deg,
+      #f4eee1 0%,
+      rgba(244, 238, 225, 0.96) 28%,
+      rgba(244, 238, 225, 0.55) 58%,
+      rgba(244, 238, 225, 0.82) 100%
+    ),
+    radial-gradient(60% 50% at 82% 66%, rgba(143, 109, 36, 0.12), transparent 70%);
+}
+
+[data-theme="light"] .brand-mark {
+  border-color: rgba(143, 109, 36, 0.45);
+  background: linear-gradient(160deg, #fffdf6, #f0e4c8);
+  color: #5f4614;
+  box-shadow: inset 0 1px 0 #ffffff;
+}
+
+[data-theme="light"] .toast {
+  box-shadow: 0 12px 30px -18px rgba(60, 44, 20, 0.5);
+}

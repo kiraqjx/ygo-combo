@@ -55,17 +55,17 @@ const PRELOAD_CONCURRENCY = 8
 const MAX_CATEGORIES = 9
 
 const PALETTE = [
-  '#4fc3ff',
-  '#ff6b9d',
-  '#33d69f',
-  '#f6c86b',
-  '#a78bfa',
-  '#ff8f5e',
-  '#5ee0d0',
-  '#9fb2ff',
-  '#ff9ad5',
+  '#a8823a',
+  '#8a3327',
+  '#6fae7d',
+  '#d9a94f',
+  '#a8823a',
+  '#c9752f',
+  '#7fc0a8',
+  '#b8933f',
+  '#d68a6a',
 ]
-const OTHER_COLOR = '#7f8b9c'
+const OTHER_COLOR = '#948871'
 
 /** 区域转移的语义标签（图例上的小字） */
 const SEMANTICS: Record<string, string> = {
@@ -305,22 +305,22 @@ function orderCards(cards: FlowCard[], edges: Edge[]): FlowCard[] {
 
 function drawBackdrop(ctx: CanvasRenderingContext2D, width: number, height: number) {
   const bg = ctx.createLinearGradient(0, 0, width * 0.45, height)
-  bg.addColorStop(0, '#05080e')
-  bg.addColorStop(0.45, '#0a1120')
-  bg.addColorStop(1, '#070a12')
+  bg.addColorStop(0, '#080605')
+  bg.addColorStop(0.45, '#0f0b08')
+  bg.addColorStop(1, '#0a0806')
   ctx.fillStyle = bg
   ctx.fillRect(0, 0, width, height)
 
   const cool = ctx.createRadialGradient(width * 0.5, height * 0.42, 0, width * 0.5, height * 0.42, width * 0.75)
-  cool.addColorStop(0, 'rgba(80, 180, 255, 0.16)')
-  cool.addColorStop(0.55, 'rgba(80, 180, 255, 0.05)')
-  cool.addColorStop(1, 'rgba(80, 180, 255, 0)')
+  cool.addColorStop(0, 'rgba(194, 162, 75, 0.16)')
+  cool.addColorStop(0.55, 'rgba(194, 162, 75, 0.05)')
+  cool.addColorStop(1, 'rgba(194, 162, 75, 0)')
   ctx.fillStyle = cool
   ctx.fillRect(0, 0, width, height)
 
   const violet = ctx.createRadialGradient(width * 0.9, height * 0.85, 0, width * 0.9, height * 0.85, width * 0.7)
-  violet.addColorStop(0, 'rgba(150, 110, 255, 0.16)')
-  violet.addColorStop(1, 'rgba(150, 110, 255, 0)')
+  violet.addColorStop(0, 'rgba(201, 155, 60, 0.16)')
+  violet.addColorStop(1, 'rgba(201, 155, 60, 0)')
   ctx.fillStyle = violet
   ctx.fillRect(0, 0, width, height)
 
@@ -350,7 +350,7 @@ function drawHeader(
   legendRows: Category[][],
 ) {
   ctx.save()
-  ctx.fillStyle = 'rgba(140, 205, 255, 0.62)'
+  ctx.fillStyle = 'rgba(194, 162, 75, 0.62)'
   ctx.font = `600 12px ${MONO}`
   drawSpaced(ctx, 'SEARCH MAP', PAD, HEADER_TITLE_TOP, 4)
 
@@ -363,14 +363,14 @@ function drawHeader(
   }
   ctx.font = `700 ${size}px ${FONT}`
   const grad = ctx.createLinearGradient(PAD, 0, PAD + 760, 0)
-  grad.addColorStop(0, '#f6fbff')
-  grad.addColorStop(0.55, '#d6ecff')
-  grad.addColorStop(1, '#6fb4ea')
+  grad.addColorStop(0, '#fdf6e6')
+  grad.addColorStop(0.55, '#f2e3c2')
+  grad.addColorStop(1, '#c2a24b')
   ctx.fillStyle = grad
   ctx.fillText(ellipsize(ctx, title, maxTitle), PAD, HEADER_TITLE_TOP + 12 + size)
 
   ctx.font = `500 14px ${FONT}`
-  ctx.fillStyle = 'rgba(158, 186, 212, 0.72)'
+  ctx.fillStyle = 'rgba(190, 174, 148, 0.72)'
   const subtitle = `${input.replayCount} 份录像 · ${stats.edges} 条连线 · ${stats.involved} 张牌参与`
   ctx.fillText(subtitle, PAD, HEADER_TITLE_TOP + 42 + size)
 
@@ -402,7 +402,7 @@ function drawHeader(
       ctx.shadowBlur = 0
 
       ctx.font = `600 12px ${FONT}`
-      ctx.fillStyle = 'rgba(226, 238, 250, 0.92)'
+      ctx.fillStyle = 'rgba(240, 230, 210, 0.92)'
       ctx.textBaseline = 'middle'
       ctx.fillText(item.label, x + 22, y - 1)
 
@@ -418,9 +418,9 @@ function drawHeader(
   })
 
   const line = ctx.createLinearGradient(PAD, 0, width - PAD, 0)
-  line.addColorStop(0, 'rgba(120, 200, 255, 0.5)')
-  line.addColorStop(0.5, 'rgba(120, 200, 255, 0.1)')
-  line.addColorStop(1, 'rgba(150, 110, 255, 0.02)')
+  line.addColorStop(0, 'rgba(194, 162, 75, 0.5)')
+  line.addColorStop(0.5, 'rgba(194, 162, 75, 0.1)')
+  line.addColorStop(1, 'rgba(201, 155, 60, 0.02)')
   ctx.fillStyle = line
   ctx.fillRect(PAD, LEGEND_TOP + legendRows.length * rowH + 6, width - PAD * 2, 1.2)
   ctx.restore()
@@ -445,7 +445,7 @@ function drawNodeCard(
   ctx.shadowColor = hexToRgba(node.color, focused ? 0.85 : 0.5)
   ctx.shadowBlur = focused ? 32 : 16
   roundRect(ctx, x, y, CARD_W, CARD_H, 8)
-  ctx.fillStyle = '#0f1723'
+  ctx.fillStyle = '#140f0a'
   ctx.fill()
   ctx.restore()
 
@@ -457,11 +457,11 @@ function drawNodeCard(
     ctx.drawImage(image, x, y, CARD_W, CARD_H)
   } else {
     const grad = ctx.createLinearGradient(x, y, x, y + CARD_H)
-    grad.addColorStop(0, '#1a2433')
-    grad.addColorStop(1, '#0c121b')
+    grad.addColorStop(0, '#251d13')
+    grad.addColorStop(1, '#110d09')
     ctx.fillStyle = grad
     ctx.fillRect(x, y, CARD_W, CARD_H)
-    ctx.fillStyle = 'rgba(196, 214, 232, 0.85)'
+    ctx.fillStyle = 'rgba(214, 200, 176, 0.85)'
     ctx.font = `600 10px ${FONT}`
     const lines = wrapLines(ctx, node.card.name, CARD_W - 10, 4)
     lines.forEach((line, index) => {
@@ -493,7 +493,7 @@ function drawNodeCard(
   const above = Math.sin(node.angle) <= 0
   const nameY = node.y + (above ? -1 : 1) * (CARD_H / 2 + 15)
   ctx.font = `500 12px ${FONT}`
-  ctx.fillStyle = focused ? '#ffffff' : 'rgba(226, 238, 250, 0.9)'
+  ctx.fillStyle = focused ? '#ffffff' : 'rgba(240, 230, 210, 0.9)'
   ctx.textBaseline = 'middle'
   ctx.textAlign = 'center'
   ctx.fillText(ellipsize(ctx, node.card.name, node.nameWidth), node.x, nameY)
@@ -614,12 +614,12 @@ function drawFooter(
   ctx.stroke()
 
   ctx.font = `600 13px ${FONT}`
-  ctx.fillStyle = 'rgba(150, 205, 245, 0.75)'
+  ctx.fillStyle = 'rgba(240, 211, 138, 0.75)'
   const brand = 'ygo-combo'
   ctx.fillText(brand, PAD, y + 42)
   const brandWidth = ctx.measureText(brand).width
   ctx.font = `400 12px ${FONT}`
-  ctx.fillStyle = 'rgba(160, 180, 200, 0.42)'
+  ctx.fillStyle = 'rgba(178, 163, 138, 0.42)'
   ctx.fillText('录像检索网络', PAD + brandWidth + 12, y + 42)
 
   if (notes.length) {
@@ -629,7 +629,7 @@ function drawFooter(
 
   const stamp = new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' })
   ctx.textAlign = 'right'
-  ctx.fillStyle = 'rgba(160, 180, 200, 0.28)'
+  ctx.fillStyle = 'rgba(178, 163, 138, 0.28)'
   ctx.fillText(stamp, width - PAD, y + 42)
   ctx.restore()
 }
@@ -837,12 +837,12 @@ export async function prepareFlowPoster(
 
     // 卡片所在的环 + 一点装饰内环
     ctx.save()
-    ctx.strokeStyle = 'rgba(120, 200, 255, 0.09)'
+    ctx.strokeStyle = 'rgba(194, 162, 75, 0.09)'
     ctx.lineWidth = 2
     ctx.beginPath()
     ctx.arc(center.x, center.y, radius, 0, Math.PI * 2)
     ctx.stroke()
-    ctx.strokeStyle = 'rgba(150, 110, 255, 0.07)'
+    ctx.strokeStyle = 'rgba(201, 155, 60, 0.07)'
     ctx.lineWidth = 1
     ctx.setLineDash([4, 10])
     ctx.beginPath()

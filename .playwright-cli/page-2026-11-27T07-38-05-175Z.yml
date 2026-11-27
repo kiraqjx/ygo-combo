@@ -1,0 +1,122 @@
+- generic [ref=f16e3]:
+  - banner [ref=f16e4]:
+    - generic [ref=f16e5]:
+      - link "决斗推演室 YGO COMBO" [ref=f16e6] [cursor=pointer]:
+        - /url: /
+        - generic [ref=f16e12]:
+          - text: 决斗推演室
+          - generic [ref=f16e13]: YGO COMBO
+      - navigation [ref=f16e14]:
+        - link "首页" [ref=f16e15] [cursor=pointer]:
+          - /url: /
+        - link "使用说明" [ref=f16e16] [cursor=pointer]:
+          - /url: /guide
+        - link "卡牌检索" [ref=f16e17] [cursor=pointer]:
+          - /url: /cards
+        - link "卡组构建" [ref=f16e18] [cursor=pointer]:
+          - /url: /deck
+        - link "启动率" [ref=f16e19] [cursor=pointer]:
+          - /url: /rates
+        - link "对战区" [ref=f16e20] [cursor=pointer]:
+          - /url: /duel
+        - link "对战分析" [ref=f16e21] [cursor=pointer]:
+          - /url: /skills
+        - link "AI 设置" [ref=f16e22] [cursor=pointer]:
+          - /url: /ai
+      - generic [ref=f16e23]:
+        - link "卡库载入中" [ref=f16e24] [cursor=pointer]:
+          - /url: /cards
+        - button "☾ 深色" [ref=f16e25] [cursor=pointer]
+        - link "卡库来源" [ref=f16e26] [cursor=pointer]:
+          - /url: https://ygocdb.com
+  - main [ref=f16e28]:
+    - generic [ref=f16e29]:
+      - generic [ref=f16e30]:
+        - textbox "搜索卡名或效果文本，例如：灰流丽 / 从卡组加入手卡" [ref=f16e35]
+        - generic [ref=f16e36]:
+          - button "全部" [ref=f16e37] [cursor=pointer]
+          - button "卡名" [ref=f16e38] [cursor=pointer]
+          - button "效果" [ref=f16e39] [cursor=pointer]
+        - generic [ref=f16e40]: 读取本地卡库…
+      - generic [ref=f16e41]:
+        - complementary [ref=f16e42]:
+          - generic [ref=f16e43]: 筛选
+          - generic [ref=f16e45]:
+            - generic [ref=f16e46]:
+              - generic [ref=f16e47]: 卡片种类
+              - generic [ref=f16e48]:
+                - button "全部" [ref=f16e49] [cursor=pointer]
+                - button "怪兽" [ref=f16e50] [cursor=pointer]
+                - button "魔法" [ref=f16e51] [cursor=pointer]
+                - button "陷阱" [ref=f16e52] [cursor=pointer]
+              - generic [ref=f16e53]:
+                - button "通常" [ref=f16e54] [cursor=pointer]
+                - button "效果" [ref=f16e55] [cursor=pointer]
+                - button "仪式" [ref=f16e56] [cursor=pointer]
+                - button "融合" [ref=f16e57] [cursor=pointer]
+                - button "同调" [ref=f16e58] [cursor=pointer]
+                - button "超量" [ref=f16e59] [cursor=pointer]
+                - button "连接" [ref=f16e60] [cursor=pointer]
+                - button "灵摆" [ref=f16e61] [cursor=pointer]
+                - button "调整" [ref=f16e62] [cursor=pointer]
+                - button "反转" [ref=f16e63] [cursor=pointer]
+                - button "灵魂" [ref=f16e64] [cursor=pointer]
+                - button "特殊召唤" [ref=f16e65] [cursor=pointer]
+                - button "速攻" [ref=f16e66] [cursor=pointer]
+                - button "永续" [ref=f16e67] [cursor=pointer]
+                - button "装备" [ref=f16e68] [cursor=pointer]
+                - button "场地" [ref=f16e69] [cursor=pointer]
+                - button "反击" [ref=f16e70] [cursor=pointer]
+            - generic [ref=f16e71]:
+              - generic [ref=f16e72]: 属性
+              - generic [ref=f16e73]: 卡库载入后显示
+            - generic [ref=f16e75]:
+              - generic [ref=f16e76]: 种族
+              - generic [ref=f16e77]: 卡库载入后显示
+            - generic [ref=f16e79]:
+              - generic [ref=f16e80]: 等级 / 阶级 / 连接
+              - generic [ref=f16e81]:
+                - button "全部" [ref=f16e82] [cursor=pointer]
+                - button "等级" [ref=f16e83] [cursor=pointer]
+                - button "阶级" [ref=f16e84] [cursor=pointer]
+                - button "连接" [ref=f16e85] [cursor=pointer]
+              - generic [ref=f16e86]:
+                - spinbutton "最小" [ref=f16e87]
+                - generic [ref=f16e88]: —
+                - spinbutton "最大" [ref=f16e89]
+            - generic [ref=f16e90]:
+              - generic [ref=f16e91]: 攻击力
+              - generic [ref=f16e92]:
+                - spinbutton "最小" [ref=f16e93]
+                - generic [ref=f16e94]: —
+                - spinbutton "最大" [ref=f16e95]
+            - generic [ref=f16e96]:
+              - generic [ref=f16e97]: 守备力
+              - generic [ref=f16e98]:
+                - spinbutton "最小" [ref=f16e99]
+                - generic [ref=f16e100]: —
+                - spinbutton "最大" [ref=f16e101]
+            - generic [ref=f16e102]:
+              - generic [ref=f16e103]: 灵摆刻度
+              - generic [ref=f16e104]:
+                - spinbutton "最小" [ref=f16e105]
+                - generic [ref=f16e106]: —
+                - spinbutton "最大" [ref=f16e107]
+            - generic [ref=f16e108]:
+              - generic [ref=f16e109]: 排序
+              - combobox [ref=f16e110]:
+                - option "卡名" [selected]
+                - option "攻击力"
+                - option "守备力"
+                - option "等级 / 连接"
+                - option "卡号"
+              - button "升序 ↑" [ref=f16e111] [cursor=pointer]
+        - generic [ref=f16e113]:
+          - generic [ref=f16e114]: 读取本地卡库…
+          - generic [ref=f16e115]:
+            - generic [ref=f16e116]: 数据源 ygocdb · 中文卡库
+            - button "刷新卡库" [disabled] [ref=f16e117]
+  - contentinfo [ref=f16e131]:
+    - generic [ref=f16e132]:
+      - generic [ref=f16e133]: 决斗推演室 · 前端推演工具，卡牌数据来自 ygocdb（中文卡库）与 YGOPRODeck。
+      - generic [ref=f16e134]: 推演结果为规则近似判断，实战请以卡片裁定为准。

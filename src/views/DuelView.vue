@@ -2214,7 +2214,7 @@ onBeforeUnmount(() => {
   gap: 6px;
   padding: 6px 14px 8px;
   overflow: hidden;
-  background: radial-gradient(circle at 50% 38%, rgba(47, 129, 247, 0.1), transparent 62%), var(--bg);
+  background: radial-gradient(circle at 50% 38%, rgba(217, 185, 106, 0.1), transparent 62%), var(--bg);
 }
 
 .duel.immersive .duel-head,
@@ -2308,9 +2308,9 @@ onBeforeUnmount(() => {
   gap: 10px;
   flex-wrap: wrap;
   padding: 6px 10px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: rgba(9, 13, 20, 0.9);
+  border: 1px solid rgba(217, 185, 106, 0.24);
+  border-radius: 3px;
+  background: rgba(13, 13, 20, 0.92);
   font-size: 12px;
 }
 
@@ -2332,9 +2332,10 @@ onBeforeUnmount(() => {
 
 .chip-chain {
   padding: 1px 7px;
-  border-radius: 999px;
-  background: rgba(139, 108, 255, 0.22);
-  color: #c7b4ff;
+  border-radius: 2px;
+  border: 1px solid rgba(217, 185, 106, 0.35);
+  background: rgba(217, 185, 106, 0.14);
+  color: var(--gold-hi);
   font-size: 11px;
   white-space: nowrap;
 }
@@ -2351,8 +2352,8 @@ onBeforeUnmount(() => {
   transform: translateX(-50%);
   padding: 8px 18px;
   border-radius: 999px;
-  border: 1px solid rgba(113, 255, 176, 0.45);
-  background: rgba(9, 13, 20, 0.94);
+  border: 1px solid rgba(124, 184, 132, 0.45);
+  background: rgba(20, 16, 11, 0.94);
   color: var(--green);
   font-size: 12px;
   pointer-events: none;
@@ -2411,7 +2412,7 @@ onBeforeUnmount(() => {
   padding: 10px 12px;
   border: 1px solid var(--line);
   border-radius: 10px;
-  background: rgba(240, 243, 246, 0.03);
+  background: rgba(232, 224, 208, 0.03);
 }
 
 .cp-main {
@@ -2443,8 +2444,10 @@ onBeforeUnmount(() => {
 
 .page-title {
   margin: 0 0 4px;
+  font-family: var(--display);
   font-size: 22px;
-  font-weight: 650;
+  font-weight: 600;
+  letter-spacing: 0.04em;
 }
 
 .duel-head-actions {
@@ -2494,9 +2497,9 @@ onBeforeUnmount(() => {
   gap: 8px;
   align-items: center;
   padding: 7px 12px;
-  border: 1px solid rgba(113, 183, 255, 0.4);
+  border: 1px solid rgba(217, 185, 106, 0.4);
   border-radius: 10px;
-  background: rgba(113, 183, 255, 0.08);
+  background: rgba(217, 185, 106, 0.08);
   font-size: 12px;
   color: var(--text-dim);
 }
@@ -2588,7 +2591,7 @@ onBeforeUnmount(() => {
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: thin;
-  scrollbar-color: rgba(240, 243, 246, 0.18) transparent;
+  scrollbar-color: rgba(232, 224, 208, 0.18) transparent;
 }
 
 .ai-log-count {
@@ -2664,7 +2667,7 @@ onBeforeUnmount(() => {
 
 .ai-log-list li.k-switch {
   border-left-color: var(--cyan);
-  background: rgba(57, 197, 207, 0.07);
+  background: rgba(217, 185, 106, 0.07);
 }
 
 .ai-log-list li.k-auto {
@@ -2688,7 +2691,7 @@ onBeforeUnmount(() => {
 .log-kind {
   padding: 0 5px;
   border-radius: 3px;
-  background: rgba(113, 183, 255, 0.14);
+  background: rgba(217, 185, 106, 0.14);
   color: var(--gold);
   font-size: 10px;
 }
@@ -2802,9 +2805,12 @@ onBeforeUnmount(() => {
   align-items: stretch;
   gap: 12px;
   padding: 14px 16px 16px;
-  border: 1px solid var(--line);
+  border: 1px solid rgba(217, 185, 106, 0.26);
   border-radius: var(--radius);
-  background: radial-gradient(circle at 50% 50%, rgba(47, 129, 247, 0.07), transparent 62%), var(--panel);
+  background:
+    radial-gradient(circle at 50% 46%, rgba(217, 185, 106, 0.08), transparent 62%),
+    linear-gradient(180deg, #12121a, #08080e);
+  box-shadow: inset 0 1px 0 rgba(244, 230, 195, 0.06);
   min-height: 460px;
 }
 
@@ -2825,9 +2831,10 @@ onBeforeUnmount(() => {
   flex-direction: column;
   gap: 7px;
   padding: 10px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: rgba(9, 13, 20, 0.82);
+  border: 1px solid rgba(217, 185, 106, 0.22);
+  border-radius: 3px;
+  background: linear-gradient(180deg, rgba(32, 26, 18, 0.9), rgba(10, 10, 16, 0.92));
+  box-shadow: inset 0 1px 0 rgba(244, 230, 195, 0.05);
   overflow: hidden;
 }
 
@@ -2839,9 +2846,9 @@ onBeforeUnmount(() => {
   aspect-ratio: 421 / 614;
   display: grid;
   place-items: center;
-  border-radius: 6px;
-  border: 1px solid var(--line);
-  background: rgba(240, 243, 246, 0.04);
+  border-radius: 3px;
+  border: 1px solid rgba(217, 185, 106, 0.3);
+  background: rgba(232, 224, 208, 0.04);
   overflow: hidden;
 }
 
@@ -3107,7 +3114,7 @@ onBeforeUnmount(() => {
   border-radius: 4px;
   display: grid;
   place-items: center;
-  background: rgba(240, 243, 246, 0.02);
+  background: rgba(232, 224, 208, 0.02);
   transition: border-color 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
   overflow: hidden;
 }
@@ -3118,13 +3125,13 @@ onBeforeUnmount(() => {
 }
 
 .zone.emz {
-  border-color: rgba(139, 108, 255, 0.4);
+  border-color: rgba(217, 185, 106, 0.4);
 }
 
 /* 魔陷区两端同时是灵摆区，给个淡一点的边提示 */
 .row.spells > .zone:first-child,
 .row.spells > .zone:last-child {
-  border-color: rgba(113, 255, 176, 0.28);
+  border-color: rgba(124, 184, 132, 0.28);
 }
 
 .zone.filled {
@@ -3134,12 +3141,12 @@ onBeforeUnmount(() => {
 
 .zone.clickable {
   cursor: pointer;
-  border-color: rgba(113, 255, 176, 0.62);
-  box-shadow: inset 0 0 0 1px rgba(113, 255, 176, 0.22), 0 0 10px rgba(113, 255, 176, 0.16);
+  border-color: rgba(124, 184, 132, 0.62);
+  box-shadow: inset 0 0 0 1px rgba(124, 184, 132, 0.22), 0 0 10px rgba(124, 184, 132, 0.16);
 }
 
 .zone.clickable:hover {
-  background: rgba(113, 255, 176, 0.1);
+  background: rgba(124, 184, 132, 0.1);
 }
 
 .zone.on {
@@ -3183,9 +3190,9 @@ onBeforeUnmount(() => {
   z-index: 2;
   display: grid;
   place-items: center;
-  border: 1px dashed rgba(113, 255, 176, 0.28);
+  border: 1px dashed rgba(124, 184, 132, 0.28);
   border-radius: 4px;
-  background: rgba(113, 255, 176, 0.03);
+  background: rgba(124, 184, 132, 0.03);
   overflow: hidden;
   cursor: default;
   /* 空格子不挡下面魔陷区的点击，只有能点/有卡时才接管 */
@@ -3200,8 +3207,8 @@ onBeforeUnmount(() => {
 
 .pendulum.filled {
   border-style: solid;
-  border-color: rgba(113, 255, 176, 0.75);
-  background: rgba(1, 4, 9, 0.9);
+  border-color: rgba(124, 184, 132, 0.75);
+  background: rgba(9, 7, 4, 0.9);
 }
 
 .pendulum.clickable {
@@ -3227,7 +3234,7 @@ onBeforeUnmount(() => {
   position: absolute;
   right: 3px;
   bottom: 2px;
-  color: rgba(113, 255, 176, 0.5);
+  color: rgba(124, 184, 132, 0.5);
   font-size: 9px;
   letter-spacing: 1px;
 }
@@ -3245,7 +3252,7 @@ onBeforeUnmount(() => {
   padding: 0 4px;
   border: none;
   border-radius: 3px;
-  background: rgba(1, 4, 9, 0.85);
+  background: rgba(9, 7, 4, 0.85);
   color: var(--cyan);
   font: inherit;
   font-size: 10px;
@@ -3264,7 +3271,7 @@ onBeforeUnmount(() => {
   top: 2px;
   padding: 0 5px;
   border-radius: 4px;
-  background: rgba(139, 108, 255, 0.92);
+  background: rgba(217, 185, 106, 0.92);
   color: #fff;
   font-size: 10px;
   font-weight: 600;
@@ -3288,7 +3295,7 @@ onBeforeUnmount(() => {
   font-family: var(--mono);
   font-size: 10px;
   font-weight: 700;
-  box-shadow: 0 0 0 1px rgba(1, 4, 9, 0.65);
+  box-shadow: 0 0 0 1px rgba(9, 7, 4, 0.65);
   animation: pop-in 0.15s ease;
 }
 
@@ -3335,7 +3342,7 @@ onBeforeUnmount(() => {
   padding: 0;
   border: 1px solid var(--line);
   border-radius: 4px;
-  background: rgba(240, 243, 246, 0.03);
+  background: rgba(232, 224, 208, 0.03);
   color: var(--text-mute);
   font-size: 10px;
   cursor: pointer;
@@ -3348,7 +3355,7 @@ onBeforeUnmount(() => {
 }
 
 .pile:hover {
-  border-color: rgba(113, 183, 255, 0.55);
+  border-color: rgba(217, 185, 106, 0.55);
   color: var(--text);
 }
 
@@ -3390,14 +3397,14 @@ onBeforeUnmount(() => {
 .pile-label {
   padding: 0 4px;
   border-radius: 4px;
-  background: rgba(1, 4, 9, 0.66);
+  background: rgba(9, 7, 4, 0.66);
   color: var(--text-dim);
 }
 
 .pile-count {
   padding: 0 4px;
   border-radius: 6px;
-  background: rgba(1, 4, 9, 0.78);
+  background: rgba(9, 7, 4, 0.78);
   color: var(--text);
   font-family: var(--mono);
   font-size: 10px;
@@ -3425,8 +3432,8 @@ onBeforeUnmount(() => {
 
 .hand-card.clickable {
   cursor: pointer;
-  border-color: rgba(113, 255, 176, 0.65);
-  box-shadow: 0 0 8px rgba(113, 255, 176, 0.2);
+  border-color: rgba(124, 184, 132, 0.65);
+  box-shadow: 0 0 8px rgba(124, 184, 132, 0.2);
 }
 
 .hand-card.clickable:hover,
@@ -3522,7 +3529,7 @@ onBeforeUnmount(() => {
   gap: 8px;
   border: 1px solid var(--line);
   border-radius: 10px;
-  background: rgba(9, 13, 20, 0.94);
+  background: rgba(20, 16, 11, 0.94);
   backdrop-filter: blur(6px);
   box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.35);
 }
@@ -3559,7 +3566,7 @@ onBeforeUnmount(() => {
   padding: 0 4px;
   border-radius: 3px;
   border: 1px solid var(--line);
-  background: rgba(1, 4, 9, 0.6);
+  background: rgba(9, 7, 4, 0.6);
   color: var(--text-dim);
   font-family: var(--mono);
   font-size: 10px;
@@ -3690,7 +3697,7 @@ onBeforeUnmount(() => {
   padding: 0 4px;
   border-radius: 5px;
   background: var(--gold);
-  color: #1a1206;
+  color: #0f0f16;
   font-size: 10px;
   font-weight: 700;
 }
@@ -3705,7 +3712,7 @@ onBeforeUnmount(() => {
   place-items: center;
   border: none;
   border-radius: 50%;
-  background: rgba(1, 4, 9, 0.85);
+  background: rgba(9, 7, 4, 0.85);
   color: var(--text);
   font-size: 13px;
   line-height: 1;
@@ -3723,7 +3730,7 @@ onBeforeUnmount(() => {
   z-index: 45;
   display: grid;
   place-items: center;
-  background: rgba(1, 4, 9, 0.72);
+  background: rgba(9, 7, 4, 0.72);
   padding: 24px;
 }
 
@@ -3769,8 +3776,8 @@ onBeforeUnmount(() => {
 
 .pile-item.clickable {
   cursor: pointer;
-  border-color: rgba(113, 255, 176, 0.6);
-  background: rgba(113, 255, 176, 0.07);
+  border-color: rgba(124, 184, 132, 0.6);
+  background: rgba(124, 184, 132, 0.07);
 }
 
 .pile-item.on {
@@ -3830,14 +3837,14 @@ onBeforeUnmount(() => {
   padding: 0 4px;
   border-radius: 3px;
   border: 1px solid var(--line);
-  background: rgba(1, 4, 9, 0.6);
+  background: rgba(9, 7, 4, 0.6);
   color: var(--text-mute);
   font-family: var(--mono);
   font-size: 10px;
 }
 
 .menu-item:hover {
-  background: rgba(113, 183, 255, 0.14);
+  background: rgba(217, 185, 106, 0.14);
 }
 
 .menu-zone {
@@ -3904,5 +3911,87 @@ onBeforeUnmount(() => {
     --zone-h: clamp(34px, calc((100vw - 56px) / 6.8), 56px);
     --zone-w: calc(var(--zone-h) * 0.72);
   }
+}
+
+/* ================================================================
+   浅色主题：对战区
+   决斗盘在这里是写死的深色（棋盘要「沉」），但整页不能因此拒绝换主题，
+   所以浅色下换一套羊皮纸配色，只保留金线、格位与状态色。
+   data-theme 挂在 <html> 上，scoped 里靠祖先选择器照样命中。
+   ================================================================ */
+
+/* 棋盘要比页面底色更沉一档，否则浅色下整块「消失」在背景里 */
+[data-theme='light'] .duel-board {
+  border-color: rgba(143, 109, 36, 0.4);
+  background:
+    radial-gradient(circle at 50% 46%, rgba(143, 109, 36, 0.1), transparent 62%),
+    linear-gradient(180deg, #e6d8bd, #d7c6a4);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.6),
+    inset 0 -1px 0 rgba(143, 109, 36, 0.14);
+}
+
+[data-theme='light'] .duel-hud {
+  border-color: rgba(143, 109, 36, 0.24);
+  background: rgba(249, 243, 229, 0.94);
+}
+
+[data-theme='light'] .duel-inspect {
+  border-color: rgba(143, 109, 36, 0.26);
+  background: linear-gradient(180deg, rgba(255, 252, 244, 0.94), rgba(243, 233, 211, 0.96));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+[data-theme='light'] .inspect-card {
+  border-color: rgba(143, 109, 36, 0.3);
+  background: rgba(120, 92, 40, 0.06);
+}
+
+/* 空格位在羊皮纸上要能看见：白色薄膜换成一层淡褐 */
+[data-theme='light'] .zone {
+  border-color: rgba(120, 92, 40, 0.28);
+  background: rgba(120, 92, 40, 0.04);
+}
+
+[data-theme='light'] .zone.filled {
+  border-color: rgba(120, 92, 40, 0.45);
+}
+
+[data-theme='light'] .zone.clickable:hover {
+  background: rgba(47, 125, 79, 0.1);
+}
+
+[data-theme='light'] .prompt {
+  border-color: rgba(143, 109, 36, 0.3);
+  background: rgba(250, 244, 230, 0.96);
+  box-shadow: 0 -6px 24px rgba(70, 52, 26, 0.14);
+}
+
+[data-theme='light'] .prompt.active {
+  border-color: rgba(143, 109, 36, 0.6);
+  box-shadow:
+    0 -6px 24px rgba(70, 52, 26, 0.16),
+    0 0 0 1px rgba(143, 109, 36, 0.24);
+}
+
+[data-theme='light'] .prompt-keys kbd,
+[data-theme='light'] .menu-item kbd {
+  border-color: rgba(143, 109, 36, 0.22);
+  background: rgba(120, 92, 40, 0.08);
+  color: var(--text-dim);
+}
+
+[data-theme='light'] .pile-overlay {
+  background: rgba(35, 28, 20, 0.45);
+}
+
+[data-theme='light'] .ai-log-mask {
+  background: rgba(35, 28, 20, 0.45);
+}
+
+[data-theme='light'] .duel-toast {
+  border-color: rgba(47, 125, 79, 0.35);
+  background: rgba(250, 244, 230, 0.97);
+  color: var(--green);
 }
 </style>

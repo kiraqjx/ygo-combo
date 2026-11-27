@@ -1,0 +1,199 @@
+- generic [ref=f18e3]:
+  - banner [ref=f18e4]:
+    - generic [ref=f18e5]:
+      - link "决斗推演室 YGO COMBO" [ref=f18e6] [cursor=pointer]:
+        - /url: /
+        - generic [ref=f18e12]:
+          - text: 决斗推演室
+          - generic [ref=f18e13]: YGO COMBO
+      - navigation [ref=f18e14]:
+        - link "首页" [ref=f18e15] [cursor=pointer]:
+          - /url: /
+        - link "使用说明" [ref=f18e16] [cursor=pointer]:
+          - /url: /guide
+        - link "卡牌检索" [ref=f18e17] [cursor=pointer]:
+          - /url: /cards
+        - link "卡组构建" [ref=f18e18] [cursor=pointer]:
+          - /url: /deck
+        - link "启动率" [ref=f18e19] [cursor=pointer]:
+          - /url: /rates
+        - link "对战区" [ref=f18e20] [cursor=pointer]:
+          - /url: /duel
+        - link "对战分析" [ref=f18e21] [cursor=pointer]:
+          - /url: /skills
+        - link "AI 设置" [ref=f18e22] [cursor=pointer]:
+          - /url: /ai
+      - generic [ref=f18e23]:
+        - link "卡库载入中" [ref=f18e24] [cursor=pointer]:
+          - /url: /cards
+        - button "☾ 深色" [ref=f18e25] [cursor=pointer]
+        - link "卡库来源" [ref=f18e26] [cursor=pointer]:
+          - /url: https://ygocdb.com
+  - main [ref=f18e28]:
+    - generic [ref=f18e29]:
+      - generic [ref=f18e30]:
+        - generic [ref=f18e31]:
+          - generic [ref=f18e32]: CONSISTENCY ENGINE
+          - heading "启动率" [level=1] [ref=f18e33]
+          - paragraph [ref=f18e34]: 常规工具只算「起手 5 张里有没有」。这里把抽滤也算进去：任何效果都拆成 「看 N 张 → 拿 M 张 → 其余去哪」和「丢 N 张」两种算子，按顺序执行， 所以启动率是一条逐步推进的随机过程，而不是一个静态公式。
+        - generic [ref=f18e35]:
+          - generic [ref=f18e36]:
+            - generic [ref=f18e37]: 等价类压缩
+            - generic [ref=f18e38]: 值迭代求最优策略
+            - generic [ref=f18e39]: 逐步归因
+          - generic [ref=f18e40]:
+            - button "模拟起手" [disabled] [ref=f18e41]
+            - button "启动率起手模拟" [disabled] [ref=f18e42]
+            - button "导出图片" [ref=f18e43] [cursor=pointer]
+      - generic [ref=f18e44]:
+        - generic [ref=f18e45]:
+          - generic [ref=f18e46]:
+            - generic [ref=f18e47]:
+              - generic [ref=f18e48]: 卡组与起手
+              - generic [ref=f18e49]: 0 张主卡组
+            - generic [ref=f18e51]:
+              - generic [ref=f18e52]:
+                - generic [ref=f18e53]: 选择卡组
+                - combobox [ref=f18e54]:
+                  - option "我的卡组" [selected]
+              - generic [ref=f18e55]:
+                - generic [ref=f18e56]: 起手
+                - generic [ref=f18e57]:
+                  - generic [ref=f18e58]:
+                    - button "先手 5" [ref=f18e59] [cursor=pointer]
+                    - button "后手 6" [ref=f18e60] [cursor=pointer]
+                  - spinbutton "起手张数" [ref=f18e61]: "5"
+          - generic [ref=f18e62]:
+            - generic [ref=f18e63]:
+              - generic [ref=f18e64]: 启动条件
+              - generic [ref=f18e65]: 组内全部满足 · 组间满足其一
+            - generic [ref=f18e66]:
+              - generic [ref=f18e67]: 还没有启动条件
+              - button "＋ 新建启动组" [ref=f18e68] [cursor=pointer]
+              - generic [ref=f18e69]: 每条检查算的是「这些卡的合计张数」：单卡就是那张卡；把多张卡并进同一条就是算总数， 例如「A、B、C 合计 ≤1」「栗球守卫 + 两颗心灵 合计 ≥1」。 选卡器可以多选：一次选中的几张卡会并进同一条检查，也就是任意一张上手即可（或）； 要「都得上手」就分几条检查加（组内是且）。「单卡 + 任意魔陷」这类门控可以直接点 「任意魔法 / 任意魔陷 / 任意怪兽」按钮，把主卡组里那一类卡合成一条检查。 组内所有检查都要满足，组间满足任意一组就启动。 废件新建成「合计 0」的检查：这一组只在手里没有它们时成立，其他组不受影响。
+          - generic [ref=f18e70]:
+            - generic [ref=f18e71]:
+              - generic [ref=f18e72]: 抽滤效果
+              - generic [ref=f18e73]: 按顺序执行
+            - generic [ref=f18e74]:
+              - generic [ref=f18e75]:
+                - button "＋ 添加效果" [ref=f18e76] [cursor=pointer]
+                - generic [ref=f18e77]: 选卡会自动识别算子，也可以自己加减
+              - generic [ref=f18e78]: 还没有效果。没有抽滤时，结果就是纯粹的起手率。
+        - complementary [ref=f18e79]:
+          - generic [ref=f18e80]:
+            - generic [ref=f18e81]: 结论
+            - generic [ref=f18e83]:
+              - generic [ref=f18e84]:
+                - generic [ref=f18e85]: ◈
+                - paragraph [ref=f18e86]: 配置好启动条件与抽滤效果后，点下面的按钮开始计算。
+              - generic [ref=f18e87]:
+                - generic [ref=f18e88]: · 这套卡组的主卡组是空的。
+                - generic [ref=f18e89]: · 还没有配置启动条件，先加一条「启动组」。
+              - button "开始计算" [disabled] [ref=f18e90]
+          - generic [ref=f18e91]:
+            - generic [ref=f18e92]: 计算过程
+            - generic [ref=f18e94]: 算出结果后，这里会列出起手概率、每个效果带来的新增达成率，以及求解方法。
+          - generic [ref=f18e96]:
+            - generic [ref=f18e97]:
+              - generic [ref=f18e98]: 起手核对器
+              - generic [ref=f18e99]: 挑一手具体的牌，逐项核对判定
+            - generic [ref=f18e100]:
+              - button "＋ 加入一张牌" [ref=f18e103] [cursor=pointer]:
+                - generic [aria-hidden] [ref=f18e105]: ▾
+              - generic [ref=f18e106]: 手牌 0 / 5 张
+              - generic [ref=f18e107]: 从主卡组挑几张牌，开始核对。
+          - generic [ref=f18e108]:
+            - generic [ref=f18e109]: 结果怎么读
+            - generic [ref=f18e111]:
+              - paragraph [ref=f18e112]: 起手是抽 5 张直接满足条件的概率，和常规工具一致。
+              - paragraph [ref=f18e113]: 启动条件是「组间或、组内且」。每条检查是一组卡（可以只有一张，也可以多张）的 合计张数区间：≥1 表示这几张里至少上手 1 张，≥2 表示合计至少 2 张， ≤N 表示合计最多 N 张（≥1 且 ≤1 就是「恰好 1 张」），合计 ≤0 就是一张都不能上手（废件）。
+              - paragraph [ref=f18e114]: 多张卡并进同一条检查时算的是总数：A、B 合计 ≥1 是「A 或 B 任意一张」， A、B、C 合计 ≤1 是「这几张废件加起来最多 1 张」。同名卡按实际张数计入合计。
+              - paragraph [ref=f18e115]: 废件写在启动条件里：同一张废件对某条路线致命、对另一条无所谓，就分别建组—— 带它的手牌满足不了「合计 0」的那一组，但可以满足另一组。组内可以同时有多条检查。
+              - paragraph [ref=f18e116]: 旧存档里的全局废件会在读取配置时自动并入启动条件： 每条废件变成一条「这些卡合计 ≤N」的检查，带豁免的按「或」拆成多个启动组。
+              - paragraph [ref=f18e117]: 效果 = 算子序列。「看 N 张 → 拿 M 张 → 其余去哪」是挖牌，「丢 N 张」是消耗。 抽 2 就是「看 2 拿 2」，翻 6 拿 1 就是「看 6 拿 1，其余送墓」，抽 3 丢 2 就是「看 3 拿 3」+「丢 2」。
+              - paragraph [ref=f18e118]: 算子是按顺序执行的，所以强贪壶这种「顶 10 除外，再抽 2」、手札抹杀这种 「先丢光手牌，再抽 5」都能直接拼出来。
+              - paragraph [ref=f18e119]: 发动条件（速攻 2 卡动）只有在手牌满足时才会执行，不满足时整个效果被跳过。
+              - paragraph [ref=f18e120]:
+                - text: 发动条件怎么拼：追加方式三选一 —— 「新开一组」是组间或（任意一组成立就能发动）； 「组内且」是在最后一组里再加一条检查（两条都要满足）； 「并入上一条」是把卡并进最后一条检查（这几张算合计，任意一张即可）。 所以「A 且（B 或 C 或 D）」= 一组里两条检查：
+                - code [ref=f18e121]: A ≥1
+                - text: 且
+                - code [ref=f18e122]: B、C、D 合计 ≥1
+                - text: ， 先加 A，切「组内且」加 B，再切「并入上一条」把 C、D 并进去。
+              - paragraph [ref=f18e123]: 选卡器支持多选（一次勾好几张再点「确定添加」）：多选的卡按当前方式落地 —— 「新开一组」会变成一组里一条检查（这几张任意一张即可）； 「组内且」每张各起一条检查（都要上手）； 「并入上一条」全部并进最后一条检查（任意一张即可）。 启动条件那边同理：多选 = 并进同一条检查（或），想「且」就分几条检查加。
+              - paragraph [ref=f18e124]: 来源卡会自动进发动条件：选中效果来源时会默认补一条「这张卡 ≥1」，因为没上手就发动不了； 从墓地 / 除外发动的效果不需要这条，删掉即可。发动后的消耗（丢手牌）仍要用「丢手牌」算子体现。
+              - paragraph [ref=f18e125]:
+                - text: 公式：起手启动率是对所有满足条件的起手构成求和
+                - code [ref=f18e126]: Σ Πᵢ C(nᵢ, hᵢ) / C(N, n)
+                - text: （nᵢ 是这张卡的投入张数，hᵢ 是抽到的张数）； 加入抽滤后按
+                - code [ref=f18e127]: V(k) = Σ 抽牌结果概率 × max(拿哪几张 / 丢哪几张) V(k+1)
+                - text: 做值迭代，所以拿牌 / 丢牌都取「最优操作」，得到的是这条路线能打出的上界。
+              - paragraph [ref=f18e128]: 怎么验证：「起手核对器」可以挑一手具体的牌，看到每一组差哪些检查、 合计区间有没有踩线，用来人工核对规则；「蒙特卡洛交叉校验」会用同一份配置强制再抽 20,000 次（固定种子），和精确解对照。 精确解是最优操作下的结果，仿真用启发式出牌，所以仿真略低属正常；显著更高才说明实现有问题。
+              - paragraph [ref=f18e129]: 精确解基于「等价类压缩 + 对算子做值迭代」，状态上限 12 万、单次预算 1200ms 内跑完，同一份配置的数字可复现； 仿真解会显示置信区间。
+      - generic [ref=f18e130]:
+        - generic [ref=f18e131]:
+          - generic [ref=f18e132]:
+            - generic [ref=f18e133]: 辅助工具 · 废件上手率
+            - generic [ref=f18e134]:
+              - text: 至少 1 张
+              - generic [ref=f18e135]: —
+          - generic [ref=f18e136]:
+            - generic [ref=f18e137]:
+              - generic [ref=f18e138]:
+                - generic [ref=f18e139]: 废件张数
+                - spinbutton "废件张数" [ref=f18e140]: "0"
+                - generic [ref=f18e141]: 张
+              - generic [ref=f18e142]: 手填 · 随这套卡组保存，不影响启动率结果
+            - generic [ref=f18e143]: 下面各行是「恰好上手 k 张」，互不累计；要看的「至少 1 张」在右上角
+            - generic [ref=f18e144]:
+              - generic [ref=f18e145]:
+                - generic [ref=f18e146]: 上手 1 张
+                - generic [ref=f18e148]: —
+              - generic [ref=f18e149]:
+                - generic [ref=f18e150]: 上手 2 张
+                - generic [ref=f18e152]: —
+              - generic [ref=f18e153]:
+                - generic [ref=f18e154]: 上手 3 张
+                - generic [ref=f18e156]: —
+              - generic [ref=f18e157]:
+                - generic [ref=f18e158]: 上手 4 张
+                - generic [ref=f18e160]: —
+              - generic [ref=f18e161]:
+                - generic [ref=f18e162]: 上手 5 张
+                - generic [ref=f18e164]: —
+            - generic [ref=f18e165]: 独立查表 · 不参与上面的启动率计算，按起手 5 张算
+        - generic [ref=f18e166]:
+          - generic [ref=f18e167]:
+            - generic [ref=f18e168]: 辅助工具 · 手坑上手率
+            - generic [ref=f18e169]:
+              - text: 至少 1 张
+              - generic [ref=f18e170]: —
+          - generic [ref=f18e171]:
+            - generic [ref=f18e172]:
+              - generic [ref=f18e173]:
+                - generic [ref=f18e174]: 手坑张数
+                - spinbutton "手坑张数" [ref=f18e175]: "0"
+                - generic [ref=f18e176]: 张
+              - generic [ref=f18e177]: 手填 · 随这套卡组保存，只查起手有没有抽到
+            - generic [ref=f18e178]: 下面各行是「恰好上手 k 张」，互不累计；要看的「至少 1 张」在右上角
+            - generic [ref=f18e179]:
+              - generic [ref=f18e180]:
+                - generic [ref=f18e181]: 上手 1 张
+                - generic [ref=f18e183]: —
+              - generic [ref=f18e184]:
+                - generic [ref=f18e185]: 上手 2 张
+                - generic [ref=f18e187]: —
+              - generic [ref=f18e188]:
+                - generic [ref=f18e189]: 上手 3 张
+                - generic [ref=f18e191]: —
+              - generic [ref=f18e192]:
+                - generic [ref=f18e193]: 上手 4 张
+                - generic [ref=f18e195]: —
+              - generic [ref=f18e196]:
+                - generic [ref=f18e197]: 上手 5 张
+                - generic [ref=f18e199]: —
+            - generic [ref=f18e200]: 独立查表 · 不参与上面的启动率计算，按起手 5 张算
+  - contentinfo [ref=f18e201]:
+    - generic [ref=f18e202]:
+      - generic [ref=f18e203]: 决斗推演室 · 前端推演工具，卡牌数据来自 ygocdb（中文卡库）与 YGOPRODeck。
+      - generic [ref=f18e204]: 推演结果为规则近似判断，实战请以卡片裁定为准。

@@ -15,8 +15,23 @@ function readStored(): ThemeName {
   return 'dark'
 }
 
-function applyTheme(name: ThemeName) {
-  if (typeof document !== 'undefined') document.documentElement.dataset.theme = name
+/**
+ * 首屏直接落主题；用户手动切换时走原生 View Transitions 做交叉淡入。
+ * 不支持该 API 或开了「减少动态效果」时退化成瞬间切换，不会报错。
+ */
+function applyTheme(name: ThemeName, animate = false) {
+  if (typeof document === 'undefined') return
+  const run = () => {
+    document.documentElement.dataset.theme = name
+  }
+  const doc = document as Document & { startViewTransition?: (cb: () => void) => unknown }
+  const reduced =
+    typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  if (animate && !reduced && typeof doc.startViewTransition === 'function') {
+    doc.startViewTransition(run)
+  } else {
+    run()
+  }
 }
 
 export const useThemeStore = defineStore('theme', () => {
@@ -27,7 +42,7 @@ export const useThemeStore = defineStore('theme', () => {
 
   function set(next: ThemeName) {
     name.value = next
-    applyTheme(next)
+    applyTheme(next, true)
     try {
       localStorage.setItem(STORAGE_KEY, next)
     } catch {

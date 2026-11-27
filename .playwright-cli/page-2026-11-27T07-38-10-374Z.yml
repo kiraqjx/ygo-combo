@@ -1,0 +1,304 @@
+- generic [ref=f17e3]:
+  - banner [ref=f17e4]:
+    - generic [ref=f17e5]:
+      - link "决斗推演室 YGO COMBO" [ref=f17e6] [cursor=pointer]:
+        - /url: /
+        - generic [ref=f17e12]:
+          - text: 决斗推演室
+          - generic [ref=f17e13]: YGO COMBO
+      - navigation [ref=f17e14]:
+        - link "首页" [ref=f17e15] [cursor=pointer]:
+          - /url: /
+        - link "使用说明" [ref=f17e16] [cursor=pointer]:
+          - /url: /guide
+        - link "卡牌检索" [ref=f17e17] [cursor=pointer]:
+          - /url: /cards
+        - link "卡组构建" [ref=f17e18] [cursor=pointer]:
+          - /url: /deck
+        - link "启动率" [ref=f17e19] [cursor=pointer]:
+          - /url: /rates
+        - link "对战区" [ref=f17e20] [cursor=pointer]:
+          - /url: /duel
+        - link "对战分析" [ref=f17e21] [cursor=pointer]:
+          - /url: /skills
+        - link "AI 设置" [ref=f17e22] [cursor=pointer]:
+          - /url: /ai
+      - generic [ref=f17e23]:
+        - link "14,461 张卡" [ref=f17e24] [cursor=pointer]:
+          - /url: /cards
+        - button "☾ 深色" [ref=f17e25] [cursor=pointer]
+        - link "卡库来源" [ref=f17e26] [cursor=pointer]:
+          - /url: https://ygocdb.com
+  - main [ref=f17e27]:
+    - generic [ref=f17e28]:
+      - generic [ref=f17e29]:
+        - generic [ref=f17e30]:
+          - combobox "切换卡组" [ref=f17e31]:
+            - option "我的卡组（0）" [selected]
+          - textbox "卡组名称" [ref=f17e32]: 我的卡组
+          - button "＋ 新建" [ref=f17e33] [cursor=pointer]
+          - button "复制" [ref=f17e34] [cursor=pointer]
+          - button "删除" [ref=f17e35] [cursor=pointer]
+          - generic [ref=f17e36]:
+            - text: 主卡组
+            - generic [ref=f17e37]: "0"
+            - generic [ref=f17e38]: /60
+          - generic [ref=f17e39]:
+            - text: 额外卡组
+            - generic [ref=f17e40]: "0"
+            - generic [ref=f17e41]: /15
+          - generic [ref=f17e42]:
+            - text: 副卡组
+            - generic [ref=f17e43]: "0"
+            - generic [ref=f17e44]: /15
+        - generic [ref=f17e45]:
+          - button "导入ydk" [ref=f17e46] [cursor=pointer]
+          - button "导出ydk" [ref=f17e47] [cursor=pointer]
+          - button "导出长图" [ref=f17e48] [cursor=pointer]
+          - button "一键排序" [disabled] [ref=f17e49]
+          - button "上手概率" [ref=f17e50] [cursor=pointer]
+          - button "小世界现象" [disabled] [ref=f17e51]
+          - button "启动率" [disabled] [ref=f17e52]
+          - generic [ref=f17e53]: 左键查看效果 · 右键移除 1 张 · Shift+右键移除全部 · 拖动卡片换区域（Shift 拖整叠）
+      - generic [ref=f17e54]:
+        - generic [ref=f17e55]:
+          - generic [ref=f17e56]:
+            - generic [ref=f17e57]:
+              - generic [ref=f17e58]: 主卡组 · 0 / 60
+              - button "清空" [disabled] [ref=f17e59]
+            - generic [ref=f17e60]: 主卡组还是空的，从右侧检索卡片并点击加入。
+          - generic [ref=f17e61]:
+            - generic [ref=f17e62]:
+              - generic [ref=f17e63]: 额外卡组 · 0 / 15
+              - button "清空" [disabled] [ref=f17e64]
+            - generic [ref=f17e65]: 额外卡组为空：融合 / 同调 / 超量 / 连接怪兽会自动进入这里。
+          - generic [ref=f17e66]:
+            - generic [ref=f17e67]:
+              - generic [ref=f17e68]: 副卡组 · 0 / 15
+              - button "清空" [disabled] [ref=f17e69]
+            - generic [ref=f17e70]: 副卡组为空，可用来准备替换方案。
+        - complementary [ref=f17e71]:
+          - generic [ref=f17e72]:
+            - generic [ref=f17e73]: 卡片检索
+            - generic [ref=f17e74]:
+              - generic [ref=f17e75]: 14,461 张
+              - button "＋ 自定义卡" [ref=f17e76] [cursor=pointer]
+          - generic [ref=f17e77]:
+            - textbox "搜索卡名 / 效果文本" [ref=f17e78]
+            - generic [ref=f17e79]:
+              - button "全部" [ref=f17e80] [cursor=pointer]
+              - button "怪兽" [ref=f17e81] [cursor=pointer]
+              - button "魔法" [ref=f17e82] [cursor=pointer]
+              - button "陷阱" [ref=f17e83] [cursor=pointer]
+            - generic [ref=f17e84]:
+              - button "自动" [ref=f17e85] [cursor=pointer]
+              - button "主" [ref=f17e86] [cursor=pointer]
+              - button "额" [ref=f17e87] [cursor=pointer]
+              - button "副" [ref=f17e88] [cursor=pointer]
+            - generic [ref=f17e89]:
+              - generic "“艾”宝-搭档 · 点击加入卡组" [ref=f17e90] [cursor=pointer]:
+                - img "“艾”宝-搭档" [ref=f17e91]
+                - generic [ref=f17e92]: “艾”宝-搭档
+                - generic [ref=f17e93]: ＋
+              - generic "“艾”打式袭击 · 点击加入卡组" [ref=f17e94] [cursor=pointer]:
+                - img "“艾”打式袭击" [ref=f17e95]
+                - generic [ref=f17e96]: “艾”打式袭击
+                - generic [ref=f17e97]: ＋
+              - generic "“艾”慕融合 · 点击加入卡组" [ref=f17e98] [cursor=pointer]:
+                - img "“艾”慕融合" [ref=f17e99]
+                - generic [ref=f17e100]: “艾”慕融合
+                - generic [ref=f17e101]: ＋
+              - generic "“艾”思考-I·Q · 点击加入卡组" [ref=f17e102] [cursor=pointer]:
+                - img "“艾”思考-I·Q" [ref=f17e103]
+                - generic [ref=f17e104]: “艾”思考-I·Q
+                - generic [ref=f17e105]: ＋
+              - generic "“艾”闲者苏生 · 点击加入卡组" [ref=f17e106] [cursor=pointer]:
+                - img "“艾”闲者苏生" [ref=f17e107]
+                - generic [ref=f17e108]: “艾”闲者苏生
+                - generic [ref=f17e109]: ＋
+              - generic "“艾”眼之影 · 点击加入卡组" [ref=f17e110] [cursor=pointer]:
+                - img "“艾”眼之影" [ref=f17e111]
+                - generic [ref=f17e112]: “艾”眼之影
+                - generic [ref=f17e113]: ＋
+              - generic "“艾”之仪式 · 点击加入卡组" [ref=f17e114] [cursor=pointer]:
+                - img "“艾”之仪式" [ref=f17e115]
+                - generic [ref=f17e116]: “艾”之仪式
+                - generic [ref=f17e117]: ＋
+              - generic "“罪宝狩猎之恶魔” · 点击加入卡组" [ref=f17e118] [cursor=pointer]:
+                - img "“罪宝狩猎之恶魔”" [ref=f17e119]
+                - generic [ref=f17e120]: “罪宝狩猎之恶魔”
+                - generic [ref=f17e121]: ＋
+              - generic "“罪宝狩猎之恶魔” 迪亚贝尔斯塔尔 · 点击加入卡组" [ref=f17e122] [cursor=pointer]:
+                - img "“罪宝狩猎之恶魔” 迪亚贝尔斯塔尔" [ref=f17e123]
+                - generic [ref=f17e124]: “罪宝狩猎之恶魔” 迪亚贝尔斯塔尔
+                - generic [ref=f17e125]: ＋
+              - generic "“K9案件” · 点击加入卡组" [ref=f17e126] [cursor=pointer]:
+                - img "“K9案件”" [ref=f17e127]
+                - generic [ref=f17e128]: “K9案件”
+                - generic [ref=f17e129]: ＋
+              - generic "「胜地咖啡」店员-迷人女孩 · 点击加入卡组" [ref=f17e130] [cursor=pointer]:
+                - img "「胜地咖啡」店员-迷人女孩" [ref=f17e131]
+                - generic [ref=f17e132]: 「胜地咖啡」店员-迷人女孩
+                - generic [ref=f17e133]: ＋
+              - generic "「A」细胞培养装置 · 点击加入卡组" [ref=f17e134] [cursor=pointer]:
+                - img "「A」细胞培养装置" [ref=f17e135]
+                - generic [ref=f17e136]: 「A」细胞培养装置
+                - generic [ref=f17e137]: ＋
+              - generic "「A」细胞散布爆弹 · 点击加入卡组" [ref=f17e138] [cursor=pointer]:
+                - img "「A」细胞散布爆弹" [ref=f17e139]
+                - generic [ref=f17e140]: 「A」细胞散布爆弹
+                - generic [ref=f17e141]: ＋
+              - generic "「A」细胞增殖装置 · 点击加入卡组" [ref=f17e142] [cursor=pointer]:
+                - img "「A」细胞增殖装置" [ref=f17e143]
+                - generic [ref=f17e144]: 「A」细胞增殖装置
+                - generic [ref=f17e145]: ＋
+              - generic "「A」细胞重组装置 · 点击加入卡组" [ref=f17e146] [cursor=pointer]:
+                - img "「A」细胞重组装置" [ref=f17e147]
+                - generic [ref=f17e148]: 「A」细胞重组装置
+                - generic [ref=f17e149]: ＋
+              - generic "『攻击』封禁 · 点击加入卡组" [ref=f17e150] [cursor=pointer]:
+                - img "『攻击』封禁" [ref=f17e151]
+                - generic [ref=f17e152]: 『攻击』封禁
+                - generic [ref=f17e153]: ＋
+              - generic "『守备』封禁 · 点击加入卡组" [ref=f17e154] [cursor=pointer]:
+                - img "『守备』封禁" [ref=f17e155]
+                - generic [ref=f17e156]: 『守备』封禁
+                - generic [ref=f17e157]: ＋
+              - generic "『焰圣剑-阿尔玛斯』 · 点击加入卡组" [ref=f17e158] [cursor=pointer]:
+                - img "『焰圣剑-阿尔玛斯』" [ref=f17e159]
+                - generic [ref=f17e160]: 『焰圣剑-阿尔玛斯』
+                - generic [ref=f17e161]: ＋
+              - generic "『焰圣剑-奥特克莱尔』 · 点击加入卡组" [ref=f17e162] [cursor=pointer]:
+                - img "『焰圣剑-奥特克莱尔』" [ref=f17e163]
+                - generic [ref=f17e164]: 『焰圣剑-奥特克莱尔』
+                - generic [ref=f17e165]: ＋
+              - generic "『焰圣剑-杜兰达尔』 · 点击加入卡组" [ref=f17e166] [cursor=pointer]:
+                - img "『焰圣剑-杜兰达尔』" [ref=f17e167]
+                - generic [ref=f17e168]: 『焰圣剑-杜兰达尔』
+                - generic [ref=f17e169]: ＋
+              - generic "『焰圣剑-咎瓦尤斯』 · 点击加入卡组" [ref=f17e170] [cursor=pointer]:
+                - img "『焰圣剑-咎瓦尤斯』" [ref=f17e171]
+                - generic [ref=f17e172]: 『焰圣剑-咎瓦尤斯』
+                - generic [ref=f17e173]: ＋
+              - generic "2人3脚僵尸 · 点击加入卡组" [ref=f17e174] [cursor=pointer]:
+                - img "2人3脚僵尸" [ref=f17e175]
+                - generic [ref=f17e176]: 2人3脚僵尸
+                - generic [ref=f17e177]: ＋
+              - generic "2选1 · 点击加入卡组" [ref=f17e178] [cursor=pointer]:
+                - img "2选1" [ref=f17e179]
+                - generic [ref=f17e180]: 2选1
+                - generic [ref=f17e181]: ＋
+              - generic "3万年的白龟 · 点击加入卡组" [ref=f17e182] [cursor=pointer]:
+                - img "3万年的白龟" [ref=f17e183]
+                - generic [ref=f17e184]: 3万年的白龟
+                - generic [ref=f17e185]: ＋
+              - generic "7 · 点击加入卡组" [ref=f17e186] [cursor=pointer]:
+                - img "7" [ref=f17e187]
+                - generic [ref=f17e188]: "7"
+                - generic [ref=f17e189]: ＋
+              - generic "7卡 · 点击加入卡组" [ref=f17e190] [cursor=pointer]:
+                - img "7卡" [ref=f17e191]
+                - generic [ref=f17e192]: 7卡
+                - generic [ref=f17e193]: ＋
+              - generic "阿波克立普斯异虫 · 点击加入卡组" [ref=f17e194] [cursor=pointer]:
+                - img "阿波克立普斯异虫" [ref=f17e195]
+                - generic [ref=f17e196]: 阿波克立普斯异虫
+                - generic [ref=f17e197]: ＋
+              - generic "阿不思的落胤 · 点击加入卡组" [ref=f17e198] [cursor=pointer]:
+                - img "阿不思的落胤" [ref=f17e199]
+                - generic [ref=f17e200]: 阿不思的落胤
+                - generic [ref=f17e201]: ＋
+              - generic "阿蒂普丝之虫惑魔 · 点击加入卡组" [ref=f17e202] [cursor=pointer]:
+                - img "阿蒂普丝之虫惑魔" [ref=f17e203]
+                - generic [ref=f17e204]: 阿蒂普丝之虫惑魔
+                - generic [ref=f17e205]: ＋
+              - generic "阿尔法大日 · 点击加入卡组" [ref=f17e206] [cursor=pointer]:
+                - img "阿尔法大日" [ref=f17e207]
+                - generic [ref=f17e208]: 阿尔法大日
+                - generic [ref=f17e209]: ＋
+              - generic "阿尔戈☆群星-飞燕的卡帕涅 · 点击加入卡组" [ref=f17e210] [cursor=pointer]:
+                - img "阿尔戈☆群星-飞燕的卡帕涅" [ref=f17e211]
+                - generic [ref=f17e212]: 阿尔戈☆群星-飞燕的卡帕涅
+                - generic [ref=f17e213]: ＋
+              - generic "阿尔戈☆群星-巨人击杀 · 点击加入卡组" [ref=f17e214] [cursor=pointer]:
+                - img "阿尔戈☆群星-巨人击杀" [ref=f17e215]
+                - generic [ref=f17e216]: 阿尔戈☆群星-巨人击杀
+                - generic [ref=f17e217]: ＋
+              - generic "阿尔戈☆群星-热斗之帕耳忒 · 点击加入卡组" [ref=f17e218] [cursor=pointer]:
+                - img "阿尔戈☆群星-热斗之帕耳忒" [ref=f17e219]
+                - generic [ref=f17e220]: 阿尔戈☆群星-热斗之帕耳忒
+                - generic [ref=f17e221]: ＋
+              - generic "阿尔戈☆群星-荣冠的阿德拉 · 点击加入卡组" [ref=f17e222] [cursor=pointer]:
+                - img "阿尔戈☆群星-荣冠的阿德拉" [ref=f17e223]
+                - generic [ref=f17e224]: 阿尔戈☆群星-荣冠的阿德拉
+                - generic [ref=f17e225]: ＋
+              - generic "阿尔戈☆群星-屠龙的厄忒欧 · 点击加入卡组" [ref=f17e226] [cursor=pointer]:
+                - img "阿尔戈☆群星-屠龙的厄忒欧" [ref=f17e227]
+                - generic [ref=f17e228]: 阿尔戈☆群星-屠龙的厄忒欧
+                - generic [ref=f17e229]: ＋
+              - generic "阿尔戈☆群星-勇骏之阿里翁 · 点击加入卡组" [ref=f17e230] [cursor=pointer]:
+                - img "阿尔戈☆群星-勇骏之阿里翁" [ref=f17e231]
+                - generic [ref=f17e232]: 阿尔戈☆群星-勇骏之阿里翁
+                - generic [ref=f17e233]: ＋
+              - generic "阿尔戈☆群星-主阵竞技场 · 点击加入卡组" [ref=f17e234] [cursor=pointer]:
+                - img "阿尔戈☆群星-主阵竞技场" [ref=f17e235]
+                - generic [ref=f17e236]: 阿尔戈☆群星-主阵竞技场
+                - generic [ref=f17e237]: ＋
+              - generic "阿尔戈☆群星-紫电的堤丢尔 · 点击加入卡组" [ref=f17e238] [cursor=pointer]:
+                - img "阿尔戈☆群星-紫电的堤丢尔" [ref=f17e239]
+                - generic [ref=f17e240]: 阿尔戈☆群星-紫电的堤丢尔
+                - generic [ref=f17e241]: ＋
+              - generic "阿格里异虫 · 点击加入卡组" [ref=f17e242] [cursor=pointer]:
+                - img "阿格里异虫" [ref=f17e243]
+                - generic [ref=f17e244]: 阿格里异虫
+                - generic [ref=f17e245]: ＋
+              - generic "阿吽呼吸 · 点击加入卡组" [ref=f17e246] [cursor=pointer]:
+                - img "阿吽呼吸" [ref=f17e247]
+                - generic [ref=f17e248]: 阿吽呼吸
+                - generic [ref=f17e249]: ＋
+              - generic "阿基多 · 点击加入卡组" [ref=f17e250] [cursor=pointer]:
+                - img "阿基多" [ref=f17e251]
+                - generic [ref=f17e252]: 阿基多
+                - generic [ref=f17e253]: ＋
+              - generic "阿吉罗斯的落胤 · 点击加入卡组" [ref=f17e254] [cursor=pointer]:
+                - img "阿吉罗斯的落胤" [ref=f17e255]
+                - generic [ref=f17e256]: 阿吉罗斯的落胤
+                - generic [ref=f17e257]: ＋
+              - generic "阿菊算盘数 · 点击加入卡组" [ref=f17e258] [cursor=pointer]:
+                - img "阿菊算盘数" [ref=f17e259]
+                - generic [ref=f17e260]: 阿菊算盘数
+                - generic [ref=f17e261]: ＋
+              - generic "阿拉弥赛亚之仪 · 点击加入卡组" [ref=f17e262] [cursor=pointer]:
+                - img "阿拉弥赛亚之仪" [ref=f17e263]
+                - generic [ref=f17e264]: 阿拉弥赛亚之仪
+                - generic [ref=f17e265]: ＋
+              - generic "阿罗妮 · 点击加入卡组" [ref=f17e266] [cursor=pointer]:
+                - img "阿罗妮" [ref=f17e267]
+                - generic [ref=f17e268]: 阿罗妮
+                - generic [ref=f17e269]: ＋
+              - generic "阿洛美勒丝之虫惑魔 · 点击加入卡组" [ref=f17e270] [cursor=pointer]:
+                - img "阿洛美勒丝之虫惑魔" [ref=f17e271]
+                - generic [ref=f17e272]: 阿洛美勒丝之虫惑魔
+                - generic [ref=f17e273]: ＋
+              - generic "阿玛比埃姑娘 · 点击加入卡组" [ref=f17e274] [cursor=pointer]:
+                - img "阿玛比埃姑娘" [ref=f17e275]
+                - generic [ref=f17e276]: 阿玛比埃姑娘
+                - generic [ref=f17e277]: ＋
+              - generic "阿米巴 · 点击加入卡组" [ref=f17e278] [cursor=pointer]:
+                - img "阿米巴" [ref=f17e279]
+                - generic [ref=f17e280]: 阿米巴
+                - generic [ref=f17e281]: ＋
+              - generic "阿努比斯的裁决 · 点击加入卡组" [ref=f17e282] [cursor=pointer]:
+                - img "阿努比斯的裁决" [ref=f17e283]
+                - generic [ref=f17e284]: 阿努比斯的裁决
+                - generic [ref=f17e285]: ＋
+              - generic "阿努比斯的审判 · 点击加入卡组" [ref=f17e286] [cursor=pointer]:
+                - img "阿努比斯的审判" [ref=f17e287]
+                - generic [ref=f17e288]: 阿努比斯的审判
+                - generic [ref=f17e289]: ＋
+            - button "加载更多（14411）" [ref=f17e290] [cursor=pointer]
+            - generic [ref=f17e291]: 点击卡片加入 · 点卡图查看详情 · 搜不到的卡可手动录入
+  - contentinfo [ref=f17e292]:
+    - generic [ref=f17e293]:
+      - generic [ref=f17e294]: 决斗推演室 · 前端推演工具，卡牌数据来自 ygocdb（中文卡库）与 YGOPRODeck。
+      - generic [ref=f17e295]: 推演结果为规则近似判断，实战请以卡片裁定为准。

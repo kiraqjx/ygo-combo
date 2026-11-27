@@ -1,0 +1,67 @@
+- generic [ref=f13e3]:
+  - banner [ref=f13e4]:
+    - generic [ref=f13e5]:
+      - link "决斗推演室 YGO COMBO" [ref=f13e6] [cursor=pointer]:
+        - /url: /
+        - generic [ref=f13e12]:
+          - text: 决斗推演室
+          - generic [ref=f13e13]: YGO COMBO
+      - navigation [ref=f13e14]:
+        - link "首页" [ref=f13e15] [cursor=pointer]:
+          - /url: /
+        - link "使用说明" [ref=f13e16] [cursor=pointer]:
+          - /url: /guide
+        - link "卡牌检索" [ref=f13e17] [cursor=pointer]:
+          - /url: /cards
+        - link "卡组构建" [ref=f13e18] [cursor=pointer]:
+          - /url: /deck
+        - link "启动率" [ref=f13e19] [cursor=pointer]:
+          - /url: /rates
+        - link "对战区" [ref=f13e20] [cursor=pointer]:
+          - /url: /duel
+        - link "对战分析" [ref=f13e21] [cursor=pointer]:
+          - /url: /skills
+        - link "AI 设置" [ref=f13e22] [cursor=pointer]:
+          - /url: /ai
+      - generic [ref=f13e23]:
+        - link "卡库载入中" [ref=f13e24] [cursor=pointer]:
+          - /url: /cards
+        - button "☀ 浅色" [ref=f13e25] [cursor=pointer]
+        - link "卡库来源" [ref=f13e26] [cursor=pointer]:
+          - /url: https://ygocdb.com
+  - main [ref=f13e28]:
+    - generic [ref=f13e29]:
+      - generic [ref=f13e30]:
+        - generic [ref=f13e31]:
+          - heading "对战区" [level=1] [ref=f13e32]
+          - paragraph [ref=f13e33]: 用「卡组构建」里的卡组推演一局，对手是只会结束回合的沙包。点场上的卡就能操作；结束时可以把过程导出成 .yrp，或绑定到卡组后在「对战分析」页转成展开说明。
+        - generic [ref=f13e34]:
+          - generic [ref=f13e35]:
+            - combobox [ref=f13e36]:
+              - option "我的卡组" [selected]
+            - generic [ref=f13e37]:
+              - text: 起手
+              - spinbutton "起手" [ref=f13e38]: "5"
+            - button "自选手牌" [ref=f13e39] [cursor=pointer]
+            - button "历史暂存" [ref=f13e40] [cursor=pointer]
+            - link "AI 设置" [ref=f13e41] [cursor=pointer]:
+              - /url: /ai
+            - button "开始对局" [ref=f13e42] [cursor=pointer]
+          - generic [ref=f13e43]:
+            - button "屏幕全屏" [ref=f13e44] [cursor=pointer]
+            - button "网站全屏" [ref=f13e45] [cursor=pointer]
+      - generic [ref=f13e46]:
+        - generic [ref=f13e47]: 卡组：主 0 · 额外 0
+        - generic [ref=f13e48]: 我的卡组
+      - generic [ref=f13e50]:
+        - paragraph [ref=f13e52]: 对局还没有开始。选好卡组后点「开始对局」。 首次对局会加载 ocgcore（WebAssembly）与卡片脚本，需要一点时间。
+        - generic [ref=f13e53]:
+          - generic [ref=f13e54]: 当前操作
+          - generic [ref=f13e55]: 先开始一局。
+      - generic [ref=f13e58] [cursor=pointer]:
+        - text: 对局记录
+        - generic [ref=f13e59]: 收起
+  - contentinfo [ref=f13e60]:
+    - generic [ref=f13e61]:
+      - generic [ref=f13e62]: 决斗推演室 · 前端推演工具，卡牌数据来自 ygocdb（中文卡库）与 YGOPRODeck。
+      - generic [ref=f13e63]: 推演结果为规则近似判断，实战请以卡片裁定为准。

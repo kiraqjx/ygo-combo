@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useCardStore } from '@/stores/cards'
 import { useHandtrapStore } from '@/stores/handtraps'
 import { listReplayBindings } from '@/lib/replayStore'
@@ -21,11 +21,6 @@ onMounted(async () => {
   }
 })
 
-const replayLabel = computed(() => (replayCount.value === null ? '—' : String(replayCount.value)))
-/** 卡库没就绪时不要编一个「14,000+」，如实说载入中 / 离线 */
-const cardCount = computed(() =>
-  cards.status === 'ready' ? cards.cards.length.toLocaleString() : '—',
-)
 const cardPhrase = computed(() => {
   if (cards.status === 'ready') return `${cards.cards.length.toLocaleString()} 张`
   return cards.status === 'error' ? '离线' : '载入中'
@@ -33,20 +28,95 @@ const cardPhrase = computed(() => {
 
 const ticker = computed(
   () =>
-    `卡池 ${cardPhrase.value} · 手坑定义 ${ht.defs.length} 种 · 录像 ${replayLabel.value} 份（展开路线由录像推导）`,
+    `卡池 ${cardPhrase.value} · 手坑定义 ${ht.defs.length} 种 · 录像 ${
+      replayCount.value === null ? '—' : replayCount.value
+    } 份（展开路线由录像推导）`,
+)
+
+/* ---------- 数字滚动 ---------- */
+
+const reducedMotion =
+  typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
+const displayed = reactive<Record<string, number>>({ cards: 0, handtraps: 0, replays: 0 })
+const frames = new Map<string, number>()
+
+function tween(key: string, to: number) {
+  const cancel = frames.get(key)
+  if (cancel) cancelAnimationFrame(cancel)
+  const from = displayed[key] ?? 0
+  if (reducedMotion || from === to) {
+    displayed[key] = to
+    return
+  }
+  const start = performance.now()
+  const duration = 720
+  const step = (now: number) => {
+    const t = Math.min(1, (now - start) / duration)
+    const eased = 1 - Math.pow(1 - t, 3)
+    displayed[key] = Math.round(from + (to - from) * eased)
+    if (t < 1) frames.set(key, requestAnimationFrame(step))
+    else frames.delete(key)
+  }
+  frames.set(key, requestAnimationFrame(step))
+}
+
+watch(
+  [() => (cards.status === 'ready' ? cards.cards.length : 0), () => ht.defs.length, replayCount],
+  ([cardTotal, handtrapTotal, replayTotal]) => {
+    tween('cards', cardTotal)
+    tween('handtraps', handtrapTotal)
+    tween('replays', replayTotal ?? 0)
+  },
+  { immediate: true },
 )
 
 const stats = computed(() => [
-  { value: cardCount.value, label: '卡池' },
-  { value: String(ht.defs.length), label: '手坑定义' },
-  { value: replayLabel.value, label: '录像' },
+  {
+    key: 'cards',
+    value: cards.status === 'ready' ? displayed.cards.toLocaleString() : '—',
+    label: '卡池',
+  },
+  {
+    key: 'handtraps',
+    value: String(displayed.handtraps),
+    label: '手坑定义',
+  },
+  {
+    key: 'replays',
+    value: replayCount.value === null ? '—' : String(displayed.replays),
+    label: '录像',
+  },
 ])
+
+/* ---------- 主视觉视差 ---------- */
+
+const bgEl = ref<HTMLElement | null>(null)
+const veilEl = ref<HTMLElement | null>(null)
+let scrollFrame = 0
+
+function onScroll() {
+  if (reducedMotion || scrollFrame) return
+  scrollFrame = requestAnimationFrame(() => {
+    scrollFrame = 0
+    const y = Math.min(window.scrollY, 640)
+    if (bgEl.value) bgEl.value.style.transform = `translate3d(0, ${y * 0.1}px, 0)`
+    if (veilEl.value) veilEl.value.style.transform = `translate3d(0, ${y * 0.04}px, 0)`
+  })
+}
+
+onMounted(() => window.addEventListener('scroll', onScroll, { passive: true }))
+onUnmounted(() => {
+  window.removeEventListener('scroll', onScroll)
+  if (scrollFrame) cancelAnimationFrame(scrollFrame)
+  for (const id of frames.values()) cancelAnimationFrame(id)
+})
 </script>
 
 <template>
   <div class="home">
-    <div class="home-bg" aria-hidden="true" />
-    <div class="home-veil" aria-hidden="true" />
+    <div ref="bgEl" class="home-bg" aria-hidden="true" />
+    <div ref="veilEl" class="home-veil" aria-hidden="true" />
     <div class="home-aurora" aria-hidden="true" />
     <div class="home-stars" aria-hidden="true" />
 

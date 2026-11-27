@@ -1,0 +1,355 @@
+/*
+ * 按钮、输入、胶囊、面板——通用组件骨架（皮肤见 skin.css）。
+ * 由原 style.css 按顺序切分而来，仍按原顺序加载，后续层（skin/atmosphere）照旧覆盖。
+ */
+
+/* ---------- buttons / inputs ---------- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 7px 15px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line-strong);
+  background: rgba(232, 224, 208, 0.05);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background var(--dur-2) var(--ease),
+    border-color var(--dur-2) var(--ease),
+    box-shadow var(--dur-2) var(--ease),
+    color var(--dur-2) var(--ease);
+  white-space: nowrap;
+}
+
+.btn:hover {
+  background: rgba(217, 185, 106, 0.14);
+  border-color: rgba(217, 185, 106, 0.42);
+  box-shadow: 0 10px 26px -18px rgba(217, 185, 106, 0.9);
+}
+
+.btn:active {
+  transform: translateY(1px);
+}
+
+.btn.primary {
+  background: linear-gradient(135deg, #b8933f, #f0d38a);
+  border-color: transparent;
+  color: #1c1408;
+  font-weight: 650;
+  box-shadow: 0 12px 30px -14px rgba(217, 185, 106, 0.85);
+}
+
+.btn.primary:hover {
+  filter: brightness(1.08);
+  box-shadow: 0 16px 36px -14px rgba(217, 185, 106, 0.95);
+}
+
+.btn.ghost {
+  background: transparent;
+  border-color: var(--line);
+}
+
+.btn.ghost:hover {
+  background: rgba(217, 185, 106, 0.08);
+}
+
+.btn.sm {
+  padding: 5px 11px;
+  font-size: 12px;
+  border-radius: 10px;
+}
+
+.btn.xs {
+  padding: 3px 9px;
+  font-size: 11px;
+  border-radius: 8px;
+}
+
+.btn.danger {
+  color: var(--red);
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.icon-btn {
+  width: 34px;
+  height: 34px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition:
+    color var(--dur-2) var(--ease),
+    border-color var(--dur-2) var(--ease),
+    background var(--dur-2) var(--ease);
+}
+
+.icon-btn:hover {
+  color: var(--text);
+  border-color: var(--line-strong);
+  background: rgba(232, 224, 208, 0.05);
+}
+
+.input,
+.select,
+.textarea {
+  width: 100%;
+  min-height: 34px;
+  background: rgba(232, 224, 208, 0.04);
+  border: 1px solid var(--line);
+  color: var(--text);
+  border-radius: var(--radius-sm);
+  padding: 7px 11px;
+  font-size: 13px;
+  outline: none;
+  transition:
+    border-color var(--dur-2) var(--ease),
+    box-shadow var(--dur-2) var(--ease);
+}
+
+.input::placeholder,
+.textarea::placeholder {
+  color: var(--text-mute);
+}
+
+.input:focus,
+.select:focus,
+.textarea:focus {
+  border-color: rgba(217, 185, 106, 0.5);
+  box-shadow: 0 0 0 3px rgba(217, 185, 106, 0.09);
+}
+
+.select {
+  appearance: none;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--text-dim) 50%),
+    linear-gradient(135deg, var(--text-dim) 50%, transparent 50%);
+  background-position:
+    calc(100% - 15px) 50%,
+    calc(100% - 10px) 50%;
+  background-size:
+    5px 5px,
+    5px 5px;
+  background-repeat: no-repeat;
+  padding-right: 28px;
+}
+
+.textarea {
+  resize: vertical;
+  min-height: 76px;
+  line-height: 1.6;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.field > label,
+.label {
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-mute);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.wrap {
+  flex-wrap: wrap;
+}
+
+.grow {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ---------- chips ---------- */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 1.5;
+  border: 1px solid var(--line);
+  background: rgba(232, 224, 208, 0.035);
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.chip button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  opacity: 0.6;
+}
+
+.chip button:hover {
+  opacity: 1;
+}
+
+.chip.gold {
+  color: var(--gold);
+  border-color: rgba(217, 185, 106, 0.32);
+  background: rgba(217, 185, 106, 0.09);
+}
+
+.chip.cyan {
+  color: var(--cyan);
+  border-color: rgba(240, 211, 138, 0.3);
+  background: rgba(240, 211, 138, 0.08);
+}
+
+.chip.violet {
+  color: var(--violet);
+  border-color: rgba(217, 185, 106, 0.32);
+  background: rgba(217, 185, 106, 0.09);
+}
+
+.chip.green {
+  color: var(--green);
+  border-color: rgba(124, 184, 132, 0.3);
+  background: rgba(124, 184, 132, 0.08);
+}
+
+.chip.red {
+  color: var(--red);
+  border-color: rgba(196, 86, 74, 0.32);
+  background: rgba(196, 86, 74, 0.09);
+}
+
+.chip.amber {
+  color: var(--amber);
+  border-color: rgba(226, 168, 86, 0.32);
+  background: rgba(226, 168, 86, 0.09);
+}
+
+.chip.plain {
+  background: rgba(232, 224, 208, 0.02);
+}
+
+.chip.clickable {
+  cursor: pointer;
+  transition: 0.16s ease;
+}
+
+.chip.clickable:hover {
+  border-color: var(--line-strong);
+  color: var(--text);
+}
+
+.chip.on {
+  color: var(--gold);
+  border-color: rgba(217, 185, 106, 0.45);
+  background: rgba(217, 185, 106, 0.12);
+}
+
+/* ---------- panel ---------- */
+.panel {
+  background: linear-gradient(180deg, rgba(27, 27, 35, 0.62), rgba(11, 11, 18, 0.8));
+  backdrop-filter: blur(22px) saturate(140%);
+  border: 1px solid rgba(232, 224, 208, 0.07);
+  border-radius: var(--radius);
+  box-shadow:
+    var(--shadow),
+    inset 0 1px 0 rgba(232, 224, 208, 0.06);
+  overflow: hidden;
+}
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 13px 16px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(232, 224, 208, 0.015);
+}
+
+.panel-title {
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-mute);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.panel-body {
+  padding: 16px;
+}
+
+.divider {
+  height: 1px;
+  background: var(--line);
+  margin: 12px 0;
+}
+
+/* ---------- 卡片按钮 ---------- */
+/*
+ * CardThumb 的根节点是真正的 <button>，键盘可聚焦。
+ * 这里只保留布局形状，外观仍交给 .card-tile 那套样式。
+ */
+button.card-tile {
+  display: block;
+  width: 100%;
+  padding: 0;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+/* ---------- 触控 ---------- */
+/*
+ * 指针粗糙（手机 / 平板）时放大命中区，桌面保持紧凑。
+ * 用 padding 撑大而不是改字号，避免行高错位。
+ */
+@media (pointer: coarse) {
+  .icon-btn {
+    width: 40px;
+    height: 40px;
+  }
+
+  .btn,
+  .btn.sm,
+  .btn.xs {
+    min-height: 40px;
+    padding-block: 9px;
+  }
+
+  .input,
+  .select,
+  .textarea {
+    min-height: 40px;
+    font-size: 16px; /* 低于 16px 时 iOS 会在聚焦时缩放页面 */
+  }
+
+  .nav a {
+    padding-block: 11px;
+  }
+}

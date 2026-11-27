@@ -52,7 +52,11 @@ const levelLabel = computed(() => {
 </script>
 
 <template>
-  <div class="card-tile" :title="`${card.name}${card.enName ? ' / ' + card.enName : ''}`">
+  <button
+    type="button"
+    class="card-tile"
+    :title="`${card.name}${card.enName ? ' / ' + card.enName : ''}`"
+  >
     <div class="card-img">
       <img
         v-if="!failed"
@@ -71,5 +75,5 @@ const levelLabel = computed(() => {
       <span v-if="showBadges && levelLabel" class="card-badge level">{{ levelLabel }}</span>
     </div>
     <div v-if="showName" class="card-name">{{ card.name }}</div>
-  </div>
+  </button>
 </template>

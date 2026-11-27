@@ -732,16 +732,19 @@ defineExpose({ handleKey })
   display: flex;
   align-items: center;
   gap: 8px;
+  font-family: var(--display);
   font-size: 12px;
   font-weight: 600;
+  letter-spacing: 0.1em;
   color: var(--gold);
 }
 
 .dq-counter {
-  padding: 0 8px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 196, 87, 0.4);
-  background: rgba(255, 196, 87, 0.12);
+  padding: 0 7px;
+  border-radius: 2px;
+  border: 1px solid rgba(217, 185, 106, 0.45);
+  background: rgba(217, 185, 106, 0.12);
+  color: var(--gold-hi);
   font-size: 11px;
   white-space: nowrap;
 }
@@ -802,7 +805,7 @@ defineExpose({ handleKey })
   display: grid;
   place-items: center;
   padding: 24px;
-  background: rgba(1, 4, 9, 0.72);
+  background: rgba(6, 4, 2, 0.74);
   backdrop-filter: blur(3px);
 }
 
@@ -813,10 +816,12 @@ defineExpose({ handleKey })
   width: min(880px, 92vw);
   max-height: 80vh;
   padding: 14px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: rgba(9, 13, 20, 0.98);
-  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(217, 185, 106, 0.32);
+  border-radius: 3px;
+  background: linear-gradient(180deg, rgba(34, 27, 19, 0.98), rgba(15, 12, 8, 0.99));
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.5),
+    0 24px 60px -30px #000;
 }
 
 .dq-more-head {
@@ -914,7 +919,7 @@ defineExpose({ handleKey })
   padding: 6px 24px 6px 10px;
   border-radius: 9px;
   border: 1px solid var(--line);
-  background: rgba(240, 243, 246, 0.04);
+  background: rgba(232, 224, 208, 0.04);
   color: var(--text);
   font-size: 12px;
   cursor: pointer;
@@ -946,19 +951,19 @@ defineExpose({ handleKey })
 
 .dq-rank.on {
   border-color: var(--gold-deep);
-  background: rgba(47, 129, 247, 0.3);
+  background: rgba(217, 185, 106, 0.3);
   color: var(--gold);
   font-weight: 600;
 }
 
 .dq-item:hover {
-  border-color: rgba(113, 183, 255, 0.45);
-  background: rgba(113, 183, 255, 0.1);
+  border-color: rgba(217, 185, 106, 0.45);
+  background: rgba(217, 185, 106, 0.1);
 }
 
 .dq-item.on {
   border-color: var(--gold);
-  background: rgba(47, 129, 247, 0.26);
+  background: rgba(217, 185, 106, 0.26);
   box-shadow: 0 0 0 1px rgba(255, 196, 87, 0.5), inset 3px 0 0 var(--gold);
 }
 
@@ -998,13 +1003,13 @@ defineExpose({ handleKey })
 }
 
 .dq-tag.special {
-  color: #c7b4ff;
-  background: rgba(139, 108, 255, 0.2);
+  color: #f4e6c3;
+  background: rgba(217, 185, 106, 0.2);
 }
 
 .dq-tag.set {
-  color: #9fd8ff;
-  background: rgba(113, 183, 255, 0.18);
+  color: #f4e6c3;
+  background: rgba(217, 185, 106, 0.18);
 }
 
 .dq-tag.activate {

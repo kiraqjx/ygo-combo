@@ -1,0 +1,76 @@
+- generic [ref=f20e3]:
+  - banner [ref=f20e4]:
+    - generic [ref=f20e5]:
+      - link "决斗推演室 YGO COMBO" [ref=f20e6] [cursor=pointer]:
+        - /url: /
+        - generic [ref=f20e12]:
+          - text: 决斗推演室
+          - generic [ref=f20e13]: YGO COMBO
+      - navigation [ref=f20e14]:
+        - link "首页" [ref=f20e15] [cursor=pointer]:
+          - /url: /
+        - link "使用说明" [ref=f20e16] [cursor=pointer]:
+          - /url: /guide
+        - link "卡牌检索" [ref=f20e17] [cursor=pointer]:
+          - /url: /cards
+        - link "卡组构建" [ref=f20e18] [cursor=pointer]:
+          - /url: /deck
+        - link "启动率" [ref=f20e19] [cursor=pointer]:
+          - /url: /rates
+        - link "对战区" [ref=f20e20] [cursor=pointer]:
+          - /url: /duel
+        - link "对战分析" [ref=f20e21] [cursor=pointer]:
+          - /url: /skills
+        - link "AI 设置" [ref=f20e22] [cursor=pointer]:
+          - /url: /ai
+      - generic [ref=f20e23]:
+        - link "卡库载入中" [ref=f20e24] [cursor=pointer]:
+          - /url: /cards
+        - button "☾ 深色" [ref=f20e25] [cursor=pointer]
+        - link "卡库来源" [ref=f20e26] [cursor=pointer]:
+          - /url: https://ygocdb.com
+  - main [ref=f20e28]:
+    - generic [ref=f20e29]:
+      - generic [ref=f20e30]:
+        - generic [ref=f20e31]:
+          - heading "对战分析" [level=1] [ref=f20e32]
+          - paragraph [ref=f20e33]: 把卡组、启动率配置与绑定的 .yrp 录像整理成一份 AI 能读懂的 skill： 录像就是展开路线，按起手自动挂到对应启动点；完整卡效、起手概率、终场与阻抗时机都会自动推导。
+        - generic [ref=f20e34]:
+          - combobox [ref=f20e35]:
+            - option "我的卡组" [selected]
+          - button "导入 .yrp" [disabled] [ref=f20e36]
+          - button "检索图" [disabled] [ref=f20e37]
+          - button "手坑报告" [disabled] [ref=f20e38]
+          - button "AI 生成 skill 包" [disabled] [ref=f20e39]
+          - button "生成 skill 包" [ref=f20e40] [cursor=pointer]
+      - generic [ref=f20e41]:
+        - generic [ref=f20e42]: 卡组：我的卡组
+        - generic [ref=f20e43]: 录像 0 份 · 0 B
+        - generic "没有可解析的录像：启动点会显示「未录入」" [ref=f20e44]: 录像路线 0 份
+        - generic [ref=f20e45]: "卡库未就绪，卡名可能显示为 #编号"
+      - generic [ref=f20e46]:
+        - complementary [ref=f20e47]:
+          - generic [ref=f20e48]:
+            - generic [ref=f20e49]: 绑定的录像
+            - button "重新解析" [disabled] [ref=f20e50]
+          - generic [ref=f20e52]:
+            - text: 还没有绑定录像。两条路都可以： 1. 在
+            - link "combo 推演" [ref=f20e53] [cursor=pointer]:
+              - /url: /duel
+            - text: 里打完一局，点「绑定到卡组」； 2. 点右上角「导入 .yrp」把已经导出的录像挂到当前卡组。
+        - generic [ref=f20e54]:
+          - generic [ref=f20e55]:
+            - generic [ref=f20e56]: Skill 包
+            - generic [ref=f20e57]:
+              - button "分片包" [ref=f20e58] [cursor=pointer]
+              - button "全量文档" [ref=f20e59] [cursor=pointer]
+            - button "编辑" [disabled] [ref=f20e60]
+            - button "复制" [disabled] [ref=f20e61]
+            - button "下载当前文件" [disabled] [ref=f20e62]
+            - button "新增文件" [disabled] [ref=f20e63]
+            - button "下载 zip" [disabled] [ref=f20e64]
+          - generic [ref=f20e65]: 点「生成 skill 包」后，这里会按「概览 / 每条启动点一份展开 / 对局样本 / 兜底 / 卡效切片」拆成多个文件。 录像的展开流程与手坑命中点在「对局样本」里；AI 先读 00-router.md 判断 5 张起手，再按需加载。 在「AI 设置」页开启 AI 后，还可以点「AI 生成 skill 包」：把卡组、录像与手坑报告发给模型， 让它改写或补写文件。
+  - contentinfo [ref=f20e67]:
+    - generic [ref=f20e68]:
+      - generic [ref=f20e69]: 决斗推演室 · 前端推演工具，卡牌数据来自 ygocdb（中文卡库）与 YGOPRODeck。
+      - generic [ref=f20e70]: 推演结果为规则近似判断，实战请以卡片裁定为准。

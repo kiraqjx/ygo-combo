@@ -1,0 +1,103 @@
+/*
+ * 浅色主题 token（羊皮纸手抄本）。
+ * 由原 style.css 按顺序切分而来，仍按原顺序加载，后续层（skin/atmosphere）照旧覆盖。
+ */
+
+/* ================================================================== */
+/* 沉金 · 石刻 · 浅色（羊皮纸手抄本）                                    */
+/* ================================================================== */
+
+[data-theme="light"] {
+  color-scheme: light;
+  --void: #ded2b8;
+  --bg: #e9dfc8;
+  --bg-2: #e3d8bf;
+  --panel: #f6efdd;
+  --panel-2: #efe6d1;
+  --line: #cdbb9b;
+  --line-strong: #a8926d;
+  --text: #241d13;
+  --text-dim: #4a3a28;
+  --text-mute: #6d5c45;
+  --gold: #8f6d24;
+  --gold-hi: #b8933f;
+  --gold-deep: #5f4614;
+  --gold-line: rgba(143, 109, 36, 0.32);
+  --gold-soft: rgba(143, 109, 36, 0.1);
+  --gold-glow: rgba(143, 109, 36, 0.18);
+  --verdigris: #2f4a41;
+  --oxblood: #8a3327;
+  --parchment: #f8efdb;
+  --ink: #241d13;
+  --green: #2f7d4f;
+  --amber: #8a6410;
+  --red: #a83a2c;
+  --accent: #8f6d24;
+  --cyan: #2f4a41;
+  --violet: #7a5c1c;
+  --shadow-1: 0 1px 2px rgba(70, 52, 26, 0.16);
+  --shadow-2: 0 18px 40px -26px rgba(70, 52, 26, 0.45);
+  --bevel: inset 0 1px 0 rgba(255, 255, 255, 0.9), inset 0 -1px 0 rgba(143, 109, 36, 0.14);
+}
+
+[data-theme="light"] body::before {
+  background:
+    radial-gradient(110% 70% at 50% -14%, rgba(143, 109, 36, 0.09), transparent 60%),
+    radial-gradient(120% 90% at 50% 50%, transparent 42%, rgba(94, 72, 38, 0.14) 100%),
+    var(--bg);
+}
+
+[data-theme="light"] body::after {
+  opacity: 0.34;
+  mix-blend-mode: multiply;
+}
+
+[data-theme="light"] .site-header {
+  background: rgba(246, 239, 221, 0.93);
+}
+
+[data-theme="light"] .flow-panel,
+[data-theme="light"] .chain-block {
+  background: #f7f2e6;
+}
+
+[data-theme="light"] .btn {
+  background: #f7f2e6;
+  color: #241d13;
+}
+
+[data-theme="light"] .btn:hover {
+  background: #f3ead6;
+}
+
+/* 浅色主按钮同样是金箔，不能是「另一个主题的绿按钮」 */
+[data-theme="light"] .btn.primary {
+  background: linear-gradient(180deg, #f6e3b4 0%, #ddbe74 38%, #c6a257 64%, #a9853d 100%);
+  border-color: rgba(120, 88, 22, 0.45);
+  color: #1a1408;
+}
+
+[data-theme="light"] .input,
+[data-theme="light"] .select,
+[data-theme="light"] .textarea {
+  background: #ffffff;
+  color: #241d13;
+}
+
+[data-theme="light"] .toast {
+  background: #241d13;
+  color: #ffffff;
+  border-color: #241d13;
+}
+
+[data-theme="light"] .duel-slot {
+  --slot-fill: rgba(35, 28, 20, 0.04);
+}
+
+[data-theme="light"] .card-detail-layer {
+  background: rgba(35, 28, 20, 0.45);
+}
+
+[data-theme="light"] .playback-step.on {
+  color: #ffffff;
+}

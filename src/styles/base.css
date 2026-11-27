@@ -1,0 +1,291 @@
+/*
+ * 重置、排版基线、顶栏/导航/页脚与页面容器。
+ * 由原 style.css 按顺序切分而来，仍按原顺序加载，后续层（skin/atmosphere）照旧覆盖。
+ */
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 14px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * 背景三层：头顶一盏冷色聚光 → 中段留纯黑 → 四周纵深暗角。
+ * 暗角是第一层「深」，金雾是第二层「贵」，不要再加第三种光。
+ */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  background:
+    radial-gradient(52% 34% at 50% -8%, rgba(109, 139, 212, 0.1), transparent 68%),
+    radial-gradient(88% 52% at 50% -6%, rgba(217, 185, 106, 0.07), transparent 64%),
+    radial-gradient(120% 78% at 50% 8%, rgba(19, 19, 29, 0.9), transparent 60%),
+    radial-gradient(140% 100% at 50% 42%, transparent 26%, rgba(0, 0, 0, 0.86) 100%),
+    var(--bg);
+}
+
+/* 颗粒：极轻的一层，只为消掉大面积渐变的色带，肉眼不该看见噪点 */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.035;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='160'%20height='160'%3E%3Cfilter%20id='n'%3E%3CfeTurbulence%20type='fractalNoise'%20baseFrequency='0.85'%20numOctaves='3'%20stitchTiles='stitch'/%3E%3CfeColorMatrix%20type='saturate'%20values='0'/%3E%3C/filter%3E%3Crect%20width='160'%20height='160'%20filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 160px 160px;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/*
+ * 键盘焦点：全站唯一的第二强调色（青金石）。
+ * 只有键盘操作才出现，鼠标点击不会闪；金色留给内容，焦点用蓝金区分。
+ */
+a:focus-visible,
+button:focus-visible,
+[role="button"]:focus-visible,
+summary:focus-visible,
+.card-tile:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--lapis-hi);
+  outline-offset: 2px;
+  border-radius: inherit;
+}
+
+/* 跳过导航：键盘用户第一下 Tab 就能越过 8 项顶栏 */
+.skip-link {
+  position: fixed;
+  top: 10px;
+  left: 50%;
+  z-index: 300;
+  padding: 9px 18px;
+  border: 1px solid var(--gold-line);
+  border-radius: var(--radius-sm);
+  background: var(--panel-2);
+  color: var(--gold-hi);
+  font-size: var(--fs-xs);
+  letter-spacing: 0.08em;
+  transform: translate(-50%, -160%);
+  transition: transform var(--dur-2) var(--ease);
+}
+
+.skip-link:focus-visible {
+  transform: translate(-50%, 0);
+}
+
+h1,
+h2,
+h3,
+h4,
+p {
+  margin: 0;
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
+/* 原生勾选 / 滑块也走金，避免一排蓝色方块跳出来 */
+input[type="checkbox"],
+input[type="radio"],
+input[type="range"],
+progress {
+  accent-color: var(--gold);
+}
+
+::selection {
+  background: rgba(217, 185, 106, 0.26);
+  color: var(--gold-hi);
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(232, 224, 208, 0.09);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(217, 185, 106, 0.32);
+}
+
+.mono {
+  font-family: var(--mono);
+  font-size: 0.92em;
+}
+
+.muted {
+  color: var(--text-dim);
+}
+
+.mute {
+  color: var(--text-mute);
+}
+
+.gold {
+  color: var(--gold);
+}
+
+/* ---------- shell ---------- */
+.app-layout {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.app-main {
+  flex: 1;
+}
+
+/* 顶栏：半透明黑曜石 + 底部一根发丝金线，不做渐变压边 */
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  backdrop-filter: blur(22px) saturate(140%);
+  background: linear-gradient(180deg, rgba(9, 9, 15, 0.88), rgba(7, 7, 12, 0.72));
+  border-bottom: 1px solid var(--hairline);
+}
+
+.site-header::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 4%,
+    rgba(217, 185, 106, 0.42) 28%,
+    rgba(244, 230, 195, 0.5) 50%,
+    rgba(217, 185, 106, 0.42) 72%,
+    transparent 96%
+  );
+  opacity: 0.55;
+}
+
+.header-inner {
+  max-width: 1520px;
+  margin: 0 auto;
+  padding: 0 28px;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  gap: 30px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  font-weight: 600;
+  font-size: 14.5px;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+/* 印玺：只留一圈金环和一道内光，不做发光块 */
+.brand-mark {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  border: 1px solid rgba(217, 185, 106, 0.5);
+  background:
+    radial-gradient(120% 120% at 30% 0%, rgba(217, 185, 106, 0.16), transparent 62%),
+    var(--bg-2);
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.7),
+    inset 0 1px 0 rgba(244, 230, 195, 0.16);
+  color: var(--gold-hi);
+}
+
+.brand small {
+  display: block;
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  color: var(--text-mute);
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+.nav {
+  display: flex;
+  gap: 2px;
+  margin-left: 8px;
+}
+
+/* 导航不做胶囊：一行字 + 悬停时浮起的金线，更像目录而不是 App tab */
+.nav a {
+  padding: 9px 13px;
+  border-radius: var(--radius-sm);
+  font-size: 13.5px;
+  letter-spacing: 0.02em;
+  color: var(--text-dim);
+  border: 1px solid transparent;
+  transition:
+    color var(--dur-2) var(--ease),
+    background var(--dur-2) var(--ease);
+  white-space: nowrap;
+}
+
+.nav a:hover {
+  color: var(--text);
+  background: rgba(232, 224, 208, 0.04);
+}
+
+.nav a.router-link-active {
+  color: var(--gold-hi);
+}
+
+.header-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.page {
+  max-width: 1520px;
+  margin: 0 auto;
+  padding: 34px 28px 96px;
+}
+
+.page-narrow {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 34px 28px 96px;
+}

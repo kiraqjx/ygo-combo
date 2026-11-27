@@ -507,13 +507,13 @@ function resetTuning() {
 }
 
 .quick-chip:hover {
-  border-color: rgba(113, 183, 255, 0.42);
+  border-color: rgba(217, 185, 106, 0.42);
   color: var(--text);
 }
 
 .quick-chip.active {
-  border-color: rgba(113, 183, 255, 0.55);
-  background: rgba(113, 183, 255, 0.12);
+  border-color: rgba(217, 185, 106, 0.55);
+  background: rgba(217, 185, 106, 0.12);
   color: var(--gold);
 }
 
@@ -524,14 +524,14 @@ function resetTuning() {
   padding: 12px 14px;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
-  background: rgba(240, 243, 246, 0.02);
+  background: rgba(232, 224, 208, 0.02);
   cursor: pointer;
   transition: 0.18s ease;
 }
 
 .toggle.on {
-  border-color: rgba(113, 183, 255, 0.42);
-  background: rgba(113, 183, 255, 0.08);
+  border-color: rgba(217, 185, 106, 0.42);
+  background: rgba(217, 185, 106, 0.08);
 }
 
 .toggle input {
@@ -564,8 +564,8 @@ function resetTuning() {
 }
 
 .toggle.on .toggle-track {
-  background: rgba(113, 183, 255, 0.3);
-  border-color: rgba(113, 183, 255, 0.6);
+  background: rgba(217, 185, 106, 0.3);
+  border-color: rgba(217, 185, 106, 0.6);
 }
 
 .toggle.on .toggle-dot {
@@ -599,7 +599,7 @@ function resetTuning() {
   padding: 8px 12px;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
-  background: rgba(240, 243, 246, 0.015);
+  background: rgba(232, 224, 208, 0.015);
 }
 
 .check {

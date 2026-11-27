@@ -72,23 +72,23 @@ interface VerbStyle {
 }
 
 const VERBS: { test: RegExp; style: VerbStyle }[] = [
-  { test: /特殊召唤/, style: { label: '特殊召唤', tone: '#a78bfa' } },
-  { test: /翻转召唤/, style: { label: '翻转召唤', tone: '#7dd3fc' } },
-  { test: /召唤/, style: { label: '召唤', tone: '#38bdf8' } },
-  { test: /盖放/, style: { label: '盖放', tone: '#f6c86b' } },
-  { test: /表示形式/, style: { label: '形式', tone: '#94a3b8' } },
-  { test: /被无效/, style: { label: '无效', tone: '#f87171' } },
-  { test: /受到 .* 伤害/, style: { label: '伤害', tone: '#fb923c' } },
-  { test: /回复 .* LP/, style: { label: '回复', tone: '#34d399' } },
-  { test: /支付 .* LP/, style: { label: '支付', tone: '#fbbf24' } },
-  { test: /^C\d+\s*发动/, style: { label: '发动', tone: '#34d399' } },
-  { test: /发动/, style: { label: '发动', tone: '#34d399' } },
-  { test: /抽了/, style: { label: '抽卡', tone: '#60a5fa' } },
-  { test: /攻击/, style: { label: '攻击', tone: '#f87171' } },
-  { test: /确认/, style: { label: '选牌', tone: '#c4b5fd' } },
-  { test: /LP/, style: { label: 'LP', tone: '#fbbf24' } },
+  { test: /特殊召唤/, style: { label: '特殊召唤', tone: '#a8823a' } },
+  { test: /翻转召唤/, style: { label: '翻转召唤', tone: '#d9c49a' } },
+  { test: /召唤/, style: { label: '召唤', tone: '#a8823a' } },
+  { test: /盖放/, style: { label: '盖放', tone: '#d9a94f' } },
+  { test: /表示形式/, style: { label: '形式', tone: '#ad9c82' } },
+  { test: /被无效/, style: { label: '无效', tone: '#c4564a' } },
+  { test: /受到 .* 伤害/, style: { label: '伤害', tone: '#c9752f' } },
+  { test: /回复 .* LP/, style: { label: '回复', tone: '#6fae7d' } },
+  { test: /支付 .* LP/, style: { label: '支付', tone: '#d9a94f' } },
+  { test: /^C\d+\s*发动/, style: { label: '发动', tone: '#6fae7d' } },
+  { test: /发动/, style: { label: '发动', tone: '#6fae7d' } },
+  { test: /抽了/, style: { label: '抽卡', tone: '#b8933f' } },
+  { test: /攻击/, style: { label: '攻击', tone: '#c4564a' } },
+  { test: /确认/, style: { label: '选牌', tone: '#efe3c6' } },
+  { test: /LP/, style: { label: 'LP', tone: '#d9a94f' } },
 ]
-const DEFAULT_VERB: VerbStyle = { label: '动作', tone: '#7dd3fc' }
+const DEFAULT_VERB: VerbStyle = { label: '动作', tone: '#d9c49a' }
 
 /** 系统行 / 与展开无关的行，画出来只会挤占版面 */
 const NOISE = [
@@ -413,23 +413,23 @@ function attachHits(nodes: ChainNode[], hits: ReplayHandtrapHit[]): ReplayHandtr
 
 function drawBackdrop(ctx: CanvasRenderingContext2D, width: number, height: number) {
   const bg = ctx.createLinearGradient(0, 0, width * 0.4, height)
-  bg.addColorStop(0, '#060910')
-  bg.addColorStop(0.45, '#0b1220')
-  bg.addColorStop(1, '#070a12')
+  bg.addColorStop(0, '#090705')
+  bg.addColorStop(0.45, '#100d09')
+  bg.addColorStop(1, '#0a0806')
   ctx.fillStyle = bg
   ctx.fillRect(0, 0, width, height)
 
   const cool = ctx.createRadialGradient(width * 0.1, 60, 0, width * 0.1, 60, width * 0.95)
-  cool.addColorStop(0, 'rgba(86, 190, 255, 0.22)')
-  cool.addColorStop(0.5, 'rgba(86, 190, 255, 0.05)')
-  cool.addColorStop(1, 'rgba(86, 190, 255, 0)')
+  cool.addColorStop(0, 'rgba(194, 162, 75, 0.22)')
+  cool.addColorStop(0.5, 'rgba(194, 162, 75, 0.05)')
+  cool.addColorStop(1, 'rgba(194, 162, 75, 0)')
   ctx.fillStyle = cool
   ctx.fillRect(0, 0, width, height)
 
   const violet = ctx.createRadialGradient(width * 0.95, height * 0.7, 0, width * 0.95, height * 0.7, width * 0.9)
-  violet.addColorStop(0, 'rgba(150, 110, 255, 0.20)')
-  violet.addColorStop(0.55, 'rgba(150, 110, 255, 0.04)')
-  violet.addColorStop(1, 'rgba(150, 110, 255, 0)')
+  violet.addColorStop(0, 'rgba(201, 155, 60, 0.20)')
+  violet.addColorStop(0.55, 'rgba(201, 155, 60, 0.04)')
+  violet.addColorStop(1, 'rgba(201, 155, 60, 0)')
   ctx.fillStyle = violet
   ctx.fillRect(0, 0, width, height)
 
@@ -457,7 +457,7 @@ function drawHeader(
   stats: { turns: number; actions: number; hits: number },
 ) {
   ctx.save()
-  ctx.fillStyle = 'rgba(140, 205, 255, 0.62)'
+  ctx.fillStyle = 'rgba(194, 162, 75, 0.62)'
   ctx.font = `600 12px ${MONO}`
   drawSpaced(ctx, 'COMBO LINE', PAD, 72, 4)
 
@@ -470,15 +470,15 @@ function drawHeader(
   }
   ctx.font = `700 ${size}px ${FONT}`
   const title = ctx.createLinearGradient(PAD, 0, PAD + 760, 0)
-  title.addColorStop(0, '#f6fbff')
-  title.addColorStop(0.55, '#cfe8ff')
-  title.addColorStop(1, '#6fb4ea')
+  title.addColorStop(0, '#fdf6e6')
+  title.addColorStop(0.55, '#f0dfba')
+  title.addColorStop(1, '#c2a24b')
   ctx.fillStyle = title
   ctx.fillText(ellipsize(ctx, name, maxTitle), PAD, 76 + size)
 
   const subY = 76 + size + 34
   ctx.font = `500 14px ${FONT}`
-  ctx.fillStyle = 'rgba(158, 186, 212, 0.72)'
+  ctx.fillStyle = 'rgba(190, 174, 148, 0.72)'
   const [me, rival] = input.analysis.names
   const subtitle = `${me || '我方'} vs ${rival || '对手'} · ${input.replayName}`
   ctx.fillText(ellipsize(ctx, subtitle, W - PAD * 2 - 380), PAD, subY)
@@ -495,18 +495,18 @@ function drawHeader(
     const x = W - PAD - (statsList.length - index) * statW
     ctx.textAlign = 'right'
     ctx.font = `700 40px ${MONO}`
-    ctx.fillStyle = index === 2 && stats.hits ? 'rgba(255, 149, 149, 0.92)' : 'rgba(236, 246, 255, 0.92)'
+    ctx.fillStyle = index === 2 && stats.hits ? 'rgba(255, 149, 149, 0.92)' : 'rgba(248, 241, 226, 0.92)'
     ctx.fillText(item.value, x + statW - 18, statTop + 40)
     ctx.font = `600 10px ${MONO}`
-    ctx.fillStyle = 'rgba(150, 190, 225, 0.5)'
+    ctx.fillStyle = 'rgba(201, 155, 60, 0.5)'
     ctx.textAlign = 'left'
     drawSpaced(ctx, item.label, x + statW - 18 - measureSpaced(ctx, item.label, 2), statTop + 62, 2)
   })
 
   const line = ctx.createLinearGradient(PAD, 0, W - PAD, 0)
-  line.addColorStop(0, 'rgba(120, 200, 255, 0.55)')
-  line.addColorStop(0.45, 'rgba(120, 200, 255, 0.12)')
-  line.addColorStop(1, 'rgba(150, 110, 255, 0.02)')
+  line.addColorStop(0, 'rgba(194, 162, 75, 0.55)')
+  line.addColorStop(0.45, 'rgba(194, 162, 75, 0.12)')
+  line.addColorStop(1, 'rgba(201, 155, 60, 0.02)')
   ctx.fillStyle = line
   ctx.fillRect(PAD, HEADER_H - 24, W - PAD * 2, 1.5)
   ctx.restore()
@@ -519,12 +519,12 @@ function drawHand(
   top: number,
 ) {
   ctx.save()
-  ctx.fillStyle = 'rgba(143, 227, 255, 0.9)'
+  ctx.fillStyle = 'rgba(240, 211, 138, 0.9)'
   ctx.font = `600 12px ${MONO}`
   drawSpaced(ctx, 'OPENING HAND', PAD, top + 20, 3)
 
   ctx.font = `600 17px ${FONT}`
-  ctx.fillStyle = 'rgba(238, 246, 255, 0.9)'
+  ctx.fillStyle = 'rgba(250, 243, 228, 0.9)'
   const label = '起手'
   const labelX = PAD + measureSpaced(ctx, 'OPENING HAND', 3) + 14
   ctx.fillText(label, labelX, top + 21)
@@ -550,7 +550,7 @@ function drawHand(
     ctx.shadowBlur = 14
     ctx.shadowOffsetY = 6
     roundRect(ctx, x, y, HAND_CARD_W, HAND_CARD_H, 9)
-    ctx.fillStyle = '#101722'
+    ctx.fillStyle = '#14100b'
     ctx.fill()
     ctx.restore()
 
@@ -562,11 +562,11 @@ function drawHand(
       ctx.drawImage(image, x, y, HAND_CARD_W, HAND_CARD_H)
     } else {
       const grad = ctx.createLinearGradient(x, y, x + HAND_CARD_W, y + HAND_CARD_H)
-      grad.addColorStop(0, '#18202d')
-      grad.addColorStop(1, '#0d131c')
+      grad.addColorStop(0, '#241c13')
+      grad.addColorStop(1, '#110e0a')
       ctx.fillStyle = grad
       ctx.fillRect(x, y, HAND_CARD_W, HAND_CARD_H)
-      ctx.fillStyle = 'rgba(206, 220, 236, 0.88)'
+      ctx.fillStyle = 'rgba(224, 210, 184, 0.88)'
       ctx.font = `600 13px ${FONT}`
       const lines = wrapLines(ctx, card.name, HAND_CARD_W - 20, 3)
       lines.forEach((line, lineIndex) => {
@@ -576,7 +576,7 @@ function drawHand(
     ctx.restore()
 
     roundRect(ctx, x + 0.5, y + 0.5, HAND_CARD_W - 1, HAND_CARD_H - 1, 9)
-    ctx.strokeStyle = 'rgba(143, 227, 255, 0.28)'
+    ctx.strokeStyle = 'rgba(240, 211, 138, 0.28)'
     ctx.lineWidth = 1
     ctx.stroke()
   })
@@ -596,11 +596,11 @@ function drawGroupBand(
   ctx.font = `700 13px ${MONO}`
   const chipW = ctx.measureText(chip).width + 22
   const chipX = RAIL_X - chipW / 2
-  ctx.shadowColor = 'rgba(120, 200, 255, 0.55)'
+  ctx.shadowColor = 'rgba(194, 162, 75, 0.55)'
   ctx.shadowBlur = 12
   const grad = ctx.createLinearGradient(chipX, 0, chipX + chipW, 0)
-  grad.addColorStop(0, 'rgba(72, 158, 232, 0.95)')
-  grad.addColorStop(1, 'rgba(150, 110, 255, 0.95)')
+  grad.addColorStop(0, 'rgba(201, 155, 60, 0.95)')
+  grad.addColorStop(1, 'rgba(201, 155, 60, 0.95)')
   roundRect(ctx, chipX, centerY - 14, chipW, 28, 14)
   ctx.fillStyle = grad
   ctx.fill()
@@ -612,14 +612,14 @@ function drawGroupBand(
   ctx.textAlign = 'left'
 
   ctx.font = `600 18px ${FONT}`
-  ctx.fillStyle = 'rgba(232, 244, 255, 0.94)'
+  ctx.fillStyle = 'rgba(246, 238, 220, 0.94)'
   const phaseName = row.phase || '展开'
   ctx.fillText(phaseName, chipX + chipW + 14, centerY + 6)
   const phaseWidth = ctx.measureText(phaseName).width
 
   const line = ctx.createLinearGradient(chipX + chipW + 24 + phaseWidth, 0, W - PAD, 0)
-  line.addColorStop(0, 'rgba(160, 205, 245, 0.35)')
-  line.addColorStop(1, 'rgba(160, 205, 245, 0)')
+  line.addColorStop(0, 'rgba(243, 224, 173, 0.35)')
+  line.addColorStop(1, 'rgba(243, 224, 173, 0)')
   ctx.fillStyle = line
   ctx.fillRect(chipX + chipW + 24 + phaseWidth, centerY - 0.5, W - PAD - (chipX + chipW + 24 + phaseWidth), 1)
   ctx.restore()
@@ -640,11 +640,11 @@ function drawNodeThumb(
     ctx.drawImage(image, x, y, THUMB_W, THUMB_H)
   } else {
     const grad = ctx.createLinearGradient(x, y, x + THUMB_W, y + THUMB_H)
-    grad.addColorStop(0, 'rgba(30, 42, 58, 0.95)')
-    grad.addColorStop(1, 'rgba(15, 21, 31, 0.95)')
+    grad.addColorStop(0, 'rgba(38, 30, 21, 0.95)')
+    grad.addColorStop(1, 'rgba(19, 14, 10, 0.95)')
     ctx.fillStyle = grad
     ctx.fillRect(x, y, THUMB_W, THUMB_H)
-    ctx.fillStyle = 'rgba(176, 198, 220, 0.8)'
+    ctx.fillStyle = 'rgba(200, 184, 156, 0.8)'
     ctx.font = `600 11px ${FONT}`
     const name = node.cardName || node.verb.label
     const lines = wrapLines(ctx, name, THUMB_W - 12, 4)
@@ -679,7 +679,7 @@ function drawNode(
   ctx.shadowBlur = 18
   ctx.shadowOffsetY = 8
   roundRect(ctx, x, y, w, h, 14)
-  ctx.fillStyle = 'rgba(16, 24, 36, 0.92)'
+  ctx.fillStyle = 'rgba(20, 15, 10, 0.92)'
   ctx.fill()
   ctx.restore()
 
@@ -718,8 +718,8 @@ function drawNode(
       textX,
       textTop + index * TEXT_LINE,
       textW,
-      'rgba(226, 238, 250, 0.94)',
-      '#8fe3ff',
+      'rgba(240, 230, 210, 0.94)',
+      '#f3e0ad',
     )
   })
   ctx.restore()
@@ -757,7 +757,7 @@ function drawNode(
     const startY = y + NODE_PAD + Math.max(THUMB_H, textHeight) + 10
     node.hits.forEach((hit, index) => {
       const rowY = startY + index * HIT_ROW_H
-      const toneHit = hit.dodged ? '#f6c86b' : '#ff8f8f'
+      const toneHit = hit.dodged ? '#d9a94f' : '#e8887f'
       const rowW = w - NODE_PAD * 2 - 4
       roundRect(ctx, x + NODE_PAD + 2, rowY, rowW, HIT_ROW_H - 10, 8)
       ctx.fillStyle = hit.dodged ? 'rgba(246, 200, 107, 0.08)' : 'rgba(255, 110, 110, 0.09)'
@@ -781,7 +781,7 @@ function drawNode(
       const nameWidth = ctx.measureText(nameText).width
 
       ctx.font = `400 12px ${FONT}`
-      ctx.fillStyle = 'rgba(214, 226, 240, 0.66)'
+      ctx.fillStyle = 'rgba(232, 220, 198, 0.66)'
       const noteX = x + NODE_PAD + 28 + nameWidth + 12
       const noteW = x + w - NODE_PAD - 14 - noteX
       const note = hit.dodged ? hit.dodgeNote ?? '自排连锁规避' : hit.effect.replace(/\*\*/g, '')
@@ -795,7 +795,7 @@ function drawNode(
   ctx.save()
   ctx.beginPath()
   ctx.arc(RAIL_X, y + 30, 17, 0, Math.PI * 2)
-  ctx.fillStyle = '#0a1220'
+  ctx.fillStyle = '#0e0b08'
   ctx.fill()
   ctx.strokeStyle = hexToRgba(tone, 0.85)
   ctx.lineWidth = 2
@@ -810,7 +810,7 @@ function drawNode(
 
   ctx.save()
   ctx.font = `700 12px ${MONO}`
-  ctx.fillStyle = 'rgba(232, 244, 255, 0.92)'
+  ctx.fillStyle = 'rgba(246, 238, 220, 0.92)'
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
   ctx.fillText(String(node.order), RAIL_X, y + 30.5)
@@ -820,12 +820,12 @@ function drawNode(
 function drawRail(ctx: CanvasRenderingContext2D, top: number, bottom: number) {
   ctx.save()
   const grad = ctx.createLinearGradient(0, top, 0, bottom)
-  grad.addColorStop(0, 'rgba(120, 200, 255, 0.85)')
+  grad.addColorStop(0, 'rgba(194, 162, 75, 0.85)')
   grad.addColorStop(0.5, 'rgba(150, 130, 255, 0.6)')
-  grad.addColorStop(1, 'rgba(120, 200, 255, 0.12)')
+  grad.addColorStop(1, 'rgba(194, 162, 75, 0.12)')
   ctx.strokeStyle = grad
   ctx.lineWidth = 2
-  ctx.shadowColor = 'rgba(120, 200, 255, 0.35)'
+  ctx.shadowColor = 'rgba(194, 162, 75, 0.35)'
   ctx.shadowBlur = 10
   ctx.beginPath()
   ctx.moveTo(RAIL_X, top)
@@ -850,12 +850,12 @@ function drawFooter(
   ctx.stroke()
 
   ctx.font = `600 13px ${FONT}`
-  ctx.fillStyle = 'rgba(150, 205, 245, 0.75)'
+  ctx.fillStyle = 'rgba(240, 211, 138, 0.75)'
   const brand = 'ygo-combo'
   ctx.fillText(brand, PAD, y + 46)
   const brandWidth = ctx.measureText(brand).width
   ctx.font = `400 12px ${FONT}`
-  ctx.fillStyle = 'rgba(160, 180, 200, 0.42)'
+  ctx.fillStyle = 'rgba(178, 163, 138, 0.42)'
   ctx.fillText('录像展开链', PAD + brandWidth + 12, y + 46)
 
   if (notes.length) {
@@ -866,10 +866,10 @@ function drawFooter(
 
   ctx.textAlign = 'right'
   ctx.font = `400 12px ${FONT}`
-  ctx.fillStyle = 'rgba(160, 180, 200, 0.45)'
+  ctx.fillStyle = 'rgba(178, 163, 138, 0.45)'
   ctx.fillText(`${input.analysis.steps.length} 条内核消息`, W - PAD, y + 44)
   const stamp = new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' })
-  ctx.fillStyle = 'rgba(160, 180, 200, 0.28)'
+  ctx.fillStyle = 'rgba(178, 163, 138, 0.28)'
   ctx.fillText(stamp, W - PAD, y + 66)
   ctx.restore()
 }
@@ -899,7 +899,7 @@ function drawHitRow(
   hit: ReplayHandtrapHit,
   top: number,
 ) {
-  const tone = hit.dodged ? '#f6c86b' : '#ff8f8f'
+  const tone = hit.dodged ? '#d9a94f' : '#e8887f'
   ctx.save()
   ctx.beginPath()
   ctx.arc(PAD + 6, top + 18, 4, 0, Math.PI * 2)
@@ -919,7 +919,7 @@ function drawHitRow(
   const turnWidth = ctx.measureText(turnLabel).width
 
   ctx.font = `400 12px ${FONT}`
-  ctx.fillStyle = 'rgba(214, 226, 240, 0.62)'
+  ctx.fillStyle = 'rgba(232, 220, 198, 0.62)'
   const triggerX = PAD + 44 + nameWidth + turnWidth
   ctx.fillText(ellipsize(ctx, hit.trigger, W - PAD - triggerX), triggerX, top + 18)
   ctx.restore()

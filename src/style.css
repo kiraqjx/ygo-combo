@@ -4142,6 +4142,11 @@ hr,
 }
 
 /* ---------- 卡组长图预览 ---------- */
+/* 长图预览可能从「模拟起手」弹窗里打开，层级要压在普通弹窗之上（仍在卡片详情层之下） */
+.poster-overlay {
+  z-index: 110;
+}
+
 .poster-modal {
   width: min(780px, 100%);
 }
@@ -4556,10 +4561,69 @@ hr,
 }
 
 /* 模拟起手 */
+/* 模拟起手：一次 20 组，每行 2 组，卡图按组内 5 张等比缩小 */
+.hand-samples {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 14px;
+}
+
+.hand-sample {
+  padding: 7px 8px 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(240, 243, 246, 0.02);
+}
+
+.hand-sample-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 5px;
+  font-size: 10.5px;
+  color: var(--text-mute);
+  min-width: 0;
+}
+
+/* 手牌是否可动：绿边是能展开的，灰边是差一手 */
+.hand-badge {
+  flex: 0 0 auto;
+  padding: 0 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 10px;
+  line-height: 15px;
+  color: var(--text-mute);
+  white-space: nowrap;
+}
+
+.hand-badge.ok {
+  color: var(--green);
+  border-color: rgba(38, 205, 77, 0.45);
+  background: rgba(38, 205, 77, 0.12);
+}
+
+.hand-sample.is-movable {
+  border-color: rgba(38, 205, 77, 0.32);
+}
+
+.hand-sample.is-stuck {
+  opacity: 0.88;
+}
+
+.hand-sample-note {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 10px;
+  color: var(--text-mute);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .hand-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 10px;
+  gap: 5px;
 }
 
 .hand-card {
@@ -4577,7 +4641,7 @@ hr,
   aspect-ratio: 421 / 614;
   object-fit: cover;
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: 4px;
   background: var(--panel-2);
   transition: 0.16s ease;
 }
@@ -4592,10 +4656,17 @@ hr,
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  margin-top: 6px;
-  font-size: 11.5px;
-  line-height: 1.35;
+  margin-top: 4px;
+  font-size: 9.5px;
+  line-height: 1.3;
   color: var(--text-dim);
+}
+
+/* 窄屏上两组并排会挤成条，改成一组一行 */
+@media (max-width: 860px) {
+  .hand-samples {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 560px) {
@@ -4780,6 +4851,22 @@ hr,
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+/* 起手模拟弹窗里的结果块：大字百分比 + 一行小字说明 */
+.rates-sim-result {
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+}
+
+.rates-sim-main {
+  font-family: var(--mono);
+  font-size: 34px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--green);
 }
 
 .rates-layout {
@@ -6413,6 +6500,10 @@ select.rate-mini {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
   margin-top: 16px;
+}
+
+.rate-hand-stat.ok b {
+  color: var(--green);
 }
 
 @media (max-width: 900px) {

@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch, type Ref } from 'vue'
+import CardDetail from '@/components/CardDetail.vue'
 import CardPicker from '@/components/CardPicker.vue'
 import { cardImageUrl } from '@/lib/cardDb'
 import { copyImageToClipboard } from '@/lib/clipboard'
 import { downloadBlob } from '@/lib/download'
+import { renderHandPoster } from '@/lib/handPoster'
 import { inferRateOps, type InferredOp } from '@/lib/infer'
 import { formatChance } from '@/lib/odds'
 import {
@@ -43,7 +45,7 @@ import {
   type SolveOptions,
 } from '@/lib/rates'
 import type { RateWorkerResponse } from '@/lib/ratesWorker'
-import type { DeckEntry } from '@/types'
+import type { CardData, DeckEntry } from '@/types'
 import { useCardStore } from '@/stores/cards'
 import { useDeckStore } from '@/stores/deck'
 
@@ -694,6 +696,8 @@ const posterCopying = ref(false)
 const posterOpen = ref(false)
 const posterUrl = ref('')
 const posterBlob = ref<Blob | null>(null)
+/** 预览的是哪张图：启动率长图 / 模拟起手长图 */
+const posterKind = ref<'启动率' | '模拟起手'>('启动率')
 
 const posterMeta = computed(() => {
   const blob = posterBlob.value
@@ -789,7 +793,7 @@ async function buildPosterBlob(): Promise<Blob | null> {
 
 function posterFileName(blob: Blob): string {
   const suffix = blob.type === 'image/png' ? 'png' : 'webp'
-  return `${safeFileName(activeDeck.value?.name || 'deck')}-启动率.${suffix}`
+  return `${safeFileName(activeDeck.value?.name || 'deck')}-${posterKind.value}.${suffix}`
 }
 
 /** 生成并打开预览弹窗：下载 / 复制都在弹窗里做 */
@@ -800,6 +804,7 @@ async function openPoster() {
     const blob = await buildPosterBlob()
     if (!blob) return
     if (posterUrl.value) URL.revokeObjectURL(posterUrl.value)
+    posterKind.value = '启动率'
     posterBlob.value = blob
     posterUrl.value = URL.createObjectURL(blob)
     posterOpen.value = true
@@ -823,7 +828,7 @@ function downloadPoster() {
   const blob = posterBlob.value
   if (!blob) return
   downloadBlob(blob, posterFileName(blob))
-  toast(`已保存启动率长图（${Math.round(blob.size / 1024)} KB）`)
+  toast(`已保存${posterKind.value}长图（${Math.round(blob.size / 1024)} KB）`)
 }
 
 async function copyPoster() {
@@ -1121,6 +1126,256 @@ const verifyInfo = computed(() => {
   }
 })
 
+/* ---------------- 模拟起手 ---------------- */
+
+/** 一次模拟多少组起手（界面按每行 2 组排版） */
+const HAND_SAMPLES = 20
+
+interface HandSample {
+  key: string
+  cards: DeckEntry[]
+}
+
+const handSamples = ref<HandSample[]>([])
+const handModal = ref(false)
+const handCard = ref<CardData | null>(null)
+let handRollSeq = 0
+
+/** 从主卡组按张数不放回随机抽取（同名卡按投入张数占位） */
+function drawHand(size: number): DeckEntry[] {
+  const pool: DeckEntry[] = []
+  for (const entry of mainEntries.value) {
+    for (let i = 0; i < entry.count; i += 1) pool.push(entry)
+  }
+  const draw = Math.min(Math.max(1, size), pool.length)
+  const picked: DeckEntry[] = []
+  for (let i = 0; i < draw; i += 1) {
+    const j = i + Math.floor(Math.random() * (pool.length - i))
+    const swap = pool[j]
+    pool[j] = pool[i]
+    pool[i] = swap
+    picked.push(pool[i])
+  }
+  return picked
+}
+
+/** 点按钮才抽：弹窗打开时连抽 HAND_SAMPLES 组 */
+function openHands() {
+  rollHands()
+  handModal.value = true
+}
+
+/** 连抽 HAND_SAMPLES 组；判定不在这里做，改启动条件时手牌不该跟着换 */
+function rollHands() {
+  if (!deckSize.value) {
+    handSamples.value = []
+    return
+  }
+  handRollSeq += 1
+  handSamples.value = Array.from({ length: HAND_SAMPLES }, (_, index) => ({
+    key: `h${handRollSeq}-${index}`,
+    cards: drawHand(handSize.value),
+  }))
+}
+
+interface JudgedHand extends HandSample {
+  started: boolean
+  hits: string[]
+  blocked: boolean
+}
+
+interface HandVerdict {
+  samples: JudgedHand[]
+  configured: boolean
+  movable: number
+  total: number
+}
+
+/**
+ * 每组的判定结果。复用「起手即启动」的同一套规则（`reached` / `clauseHolds`），
+ * 所以这里标出来的「可动」和上面启动率的口径一致；只读数据，改启动条件会跟着重算。
+ */
+const handVerdict = computed<HandVerdict>(() => {
+  const starters = plan.value.starters
+  const configured = starters.length > 0
+  const samples = handSamples.value
+  if (!samples.length) return { samples: [], configured, movable: 0, total: 0 }
+
+  const model = buildRateModel(mainEntries.value, starters, plan.value.blockers)
+  let movable = 0
+  const judged = samples.map((sample) => {
+    const hand = new Array<number>(model.classes.length).fill(0)
+    for (const card of sample.cards) {
+      const at = model.index.get(card.id)
+      if (at !== undefined) hand[at] += 1
+    }
+    const hits = starters
+      .map((clause, index) => ({ index, ok: clauseHolds(hand, clause, model.index) }))
+      .filter((hit) => hit.ok)
+      .map((hit) => `启动组 ${hit.index + 1}`)
+    const started = configured && reached(hand, starters, plan.value.blockers, model.index)
+    if (started) movable += 1
+    return {
+      ...sample,
+      started,
+      hits,
+      // 有启动组成立但整体不成立 → 被废件（合计 ≤N 的检查）卡住
+      blocked: !started && hits.length > 0,
+    }
+  })
+  // 不可动的排前面（sort 是稳定的，同组内保持抽出来的顺序），先看打不动的更实用
+  judged.sort((a, b) => Number(a.started) - Number(b.started))
+  return { samples: judged, configured, movable, total: judged.length }
+})
+
+/** 标记旁边的说明：命中的启动组 / 被废件卡住 */
+function handNote(sample: JudgedHand): string {
+  if (!handVerdict.value.configured) return ''
+  if (sample.started) {
+    const shown = sample.hits.slice(0, 2).join(' / ')
+    return sample.hits.length > 2 ? `${shown} +${sample.hits.length - 2}` : shown
+  }
+  return sample.blocked ? '被废件卡住' : ''
+}
+
+function openHandCard(id: number) {
+  const card = cards.getCard(id)
+  if (card) handCard.value = card
+}
+
+const handPosterBusy = ref(false)
+
+/** 把当前这批起手（连同可动标注）画成一张长图 */
+async function exportHandPoster() {
+  if (handPosterBusy.value) return
+  const verdict = handVerdict.value
+  if (!verdict.samples.length) {
+    toast('先模拟几组起手再导出', true)
+    return
+  }
+
+  handPosterBusy.value = true
+  try {
+    const blob = await renderHandPoster(
+      verdict.samples.map((sample) => ({
+        cards: sample.cards.map((card) => ({ id: card.id, name: card.name })),
+        ok: verdict.configured ? sample.started : undefined,
+        note: handNote(sample) || undefined,
+      })),
+      {
+        deckName: activeDeck.value?.name || '未命名卡组',
+        deckSize: deckSize.value,
+      },
+    )
+    if (posterUrl.value) URL.revokeObjectURL(posterUrl.value)
+    posterKind.value = '模拟起手'
+    posterBlob.value = blob
+    posterUrl.value = URL.createObjectURL(blob)
+    posterOpen.value = true
+  } catch (error) {
+    toast(error instanceof Error ? error.message : '导出模拟起手长图失败', true)
+  } finally {
+    handPosterBusy.value = false
+  }
+}
+
+/* ---------------- 起手模拟（抽样统计启动率） ---------------- */
+
+/** 模拟次数的取值范围与预设 */
+const SIM_MIN = 100
+const SIM_MAX = 1_000_000
+const SIM_DEFAULT = 10_000
+const SIM_PRESETS = [1_000, 10_000, 100_000]
+/** 每跑多少手让出一次主线程，好让进度能刷出来 */
+const SIM_CHUNK = 5_000
+
+const simOpen = ref(false)
+const simTrials = ref(SIM_DEFAULT)
+const simBusy = ref(false)
+const simProgress = ref(0)
+/** 上一次模拟结果：命中手数 / 模拟手数 / 比例 */
+const simResult = ref<{ hits: number; trials: number; rate: number } | null>(null)
+
+function clampTrials(value: number): number {
+  const size = Math.floor(Number(value) || 0)
+  return Math.min(SIM_MAX, Math.max(SIM_MIN, size || SIM_DEFAULT))
+}
+
+function setSimTrials(value: number) {
+  simTrials.value = clampTrials(value)
+}
+
+function openSim() {
+  simOpen.value = true
+}
+
+/**
+ * 随机抽 N 手，数其中有多少手「起手即可动」（`reached`，只看起手、不算抽滤）。
+ * 判定和精确解完全同一套，只是把枚举换成抽样；分片跑，几万到几十万手也不会卡住页面。
+ */
+async function runSimulation() {
+  if (simBusy.value) return
+  if (!deckSize.value || !plan.value.starters.length) return
+
+  const trials = clampTrials(simTrials.value)
+  simTrials.value = trials
+  simBusy.value = true
+  simProgress.value = 0
+  simResult.value = null
+  try {
+    const model = buildRateModel(mainEntries.value, plan.value.starters, plan.value.blockers)
+    const starters = plan.value.starters
+    const blockers = plan.value.blockers
+    let hits = 0
+    for (let start = 0; start < trials; start += SIM_CHUNK) {
+      const end = Math.min(trials, start + SIM_CHUNK)
+      for (let i = start; i < end; i += 1) {
+        const hand = new Array<number>(model.classes.length).fill(0)
+        for (const card of drawHand(handSize.value)) {
+          const at = model.index.get(card.id)
+          if (at !== undefined) hand[at] += 1
+        }
+        if (reached(hand, starters, blockers, model.index)) hits += 1
+      }
+      simProgress.value = end / trials
+      if (end < trials) {
+        // 让出一帧，进度和「模拟中…」才看得到
+        await new Promise((resolve) => window.setTimeout(resolve, 0))
+      }
+    }
+    simResult.value = { hits, trials, rate: hits / trials }
+  } finally {
+    simBusy.value = false
+    simProgress.value = 1
+  }
+}
+
+/** 解析解（起手即启动率），给抽样结果做对照 */
+const simExactChance = computed(() => {
+  if (!simResult.value) return null
+  if (!deckSize.value || !plan.value.starters.length) return null
+  return liveOpeningChance()
+})
+
+/** 结果文案：千分位、百分比、抽样误差都在这里算好，模板只管摆 */
+const simNote = computed(() => {
+  const result = simResult.value
+  if (!result) return null
+  const sigma = Math.sqrt(Math.max(0, result.rate * (1 - result.rate) / result.trials))
+  return {
+    rate: formatChance(result.rate),
+    counts: `${result.hits.toLocaleString('zh-CN')} / ${result.trials.toLocaleString('zh-CN')}`,
+    /** 95% 置信区间的半宽（百分点） */
+    margin: (sigma * 1.96 * 100).toFixed(1),
+    exact: simExactChance.value === null ? '' : formatChance(simExactChance.value),
+  }
+})
+
+// 卡组或启动条件一变，上一次抽样的数字就作废了
+watch(editVersion, () => {
+  simResult.value = null
+})
+
 /* ---------------- 求解：优先放进 Worker ---------------- */
 
 type JobKind = 'main' | 'cross'
@@ -1415,9 +1670,20 @@ onUnmounted(() => {
           <span class="chip violet">值迭代求最优策略</span>
           <span class="chip amber">逐步归因</span>
         </div>
-        <button class="btn ghost sm" :disabled="posterBusy" @click="openPoster">
-          {{ posterBusy ? '生成中…' : '导出图片' }}
-        </button>
+        <div class="row">
+          <button class="btn ghost sm" :disabled="!deckSize" @click="openHands">模拟起手</button>
+          <button
+            class="btn ghost sm"
+            :disabled="!deckSize || !plan.starters.length"
+            title="随机抽若干手，统计起手即可动的比例"
+            @click="openSim"
+          >
+            启动率起手模拟
+          </button>
+          <button class="btn ghost sm" :disabled="posterBusy" @click="openPoster">
+            {{ posterBusy ? '生成中…' : '导出图片' }}
+          </button>
+        </div>
       </div>
     </header>
 
@@ -2054,18 +2320,163 @@ onUnmounted(() => {
       </div>
     </section>
 
-    <div v-if="posterOpen" class="overlay center" @click.self="closePoster">
+    <div v-if="simOpen" class="overlay center" @click.self="simOpen = false">
+      <div class="modal" style="width: min(520px, 100%)">
+        <div class="modal-head">
+          <div>
+            <div style="font-size: 14px; font-weight: 600">启动率起手模拟</div>
+            <div class="inline-note">随机抽手，统计起手即可动的比例</div>
+          </div>
+          <button class="icon-btn" aria-label="关闭" @click="simOpen = false">✕</button>
+        </div>
+        <div class="modal-body rate-block">
+          <div class="inline-note">
+            只看起手、不含抽滤，判定和上面的启动率同一套（组内全满足、组间满足其一）。
+            抽得越多越接近精确解；改卡组或启动条件后需要重新模拟。
+          </div>
+
+          <div v-if="!plan.starters.length" class="rate-note amber">
+            还没有启动条件：先在「启动条件」里配置启动组。
+          </div>
+
+          <label class="rate-field">
+            <span>模拟次数</span>
+            <input
+              class="input rate-mini"
+              type="number"
+              :min="SIM_MIN"
+              :max="SIM_MAX"
+              step="1000"
+              :value="simTrials"
+              :disabled="simBusy"
+              aria-label="模拟次数"
+              @change="setSimTrials(Number(($event.target as HTMLInputElement).value))"
+            />
+            <span>手</span>
+          </label>
+          <div class="row wrap" style="gap: 6px">
+            <button
+              v-for="preset in SIM_PRESETS"
+              :key="preset"
+              class="btn xs ghost"
+              :disabled="simBusy"
+              @click="setSimTrials(preset)"
+            >
+              {{ preset.toLocaleString('zh-CN') }}
+            </button>
+          </div>
+
+          <div v-if="simNote" class="rates-sim-result">
+            <div class="rates-sim-main">{{ simNote.rate }}</div>
+            <div class="inline-note">
+              可动 {{ simNote.counts }} 手 · 抽样误差 ±{{ simNote.margin }}pp（95%）
+              <template v-if="simNote.exact"> · 精确解 {{ simNote.exact }}</template>
+            </div>
+          </div>
+          <div v-else-if="simBusy" class="inline-note">
+            模拟中… {{ Math.round(simProgress * 100) }}%
+          </div>
+          <div v-else class="empty">点「开始模拟」跑一次。</div>
+        </div>
+        <div class="modal-foot">
+          <button class="btn ghost" @click="simOpen = false">关闭</button>
+          <button
+            class="btn primary"
+            :disabled="simBusy || !deckSize || !plan.starters.length"
+            @click="runSimulation"
+          >
+            {{ simBusy ? '模拟中…' : '开始模拟' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="handModal" class="overlay center" @click.self="handModal = false">
+      <div class="modal" style="width: min(1040px, 100%)">
+        <div class="modal-head">
+          <div>
+            <div style="font-size: 14px; font-weight: 600">模拟起手 · {{ handVerdict.total }} 组</div>
+            <div class="inline-note">
+              从主卡组 {{ deckSize }} 张中随机抽 {{ handSize }} 张（不放回，按同名卡张数计权重）；按启动条件判定，组内全满足、组间满足其一；不可动的排在前面
+            </div>
+          </div>
+          <div class="row" style="gap: 10px; align-items: center">
+            <span class="rate-hand-stat" :class="handVerdict.movable > 0 ? 'ok' : ''">
+              可动<b>{{ handVerdict.movable }} / {{ handVerdict.total }}</b>
+            </span>
+            <button class="icon-btn" aria-label="关闭" @click="handModal = false">✕</button>
+          </div>
+        </div>
+        <div class="modal-body">
+          <div v-if="!handVerdict.configured" class="rate-note amber" style="margin-bottom: 12px">
+            还没有启动条件：先在「启动条件」里配置启动组，这里才会标出哪些起手可动。
+          </div>
+          <div v-if="handVerdict.total" class="hand-samples">
+            <div
+              v-for="(sample, index) in handVerdict.samples"
+              :key="sample.key"
+              class="hand-sample"
+              :class="{
+                'is-movable': handVerdict.configured && sample.started,
+                'is-stuck': handVerdict.configured && !sample.started,
+              }"
+            >
+              <div class="hand-sample-head">
+                <span class="mono">#{{ String(index + 1).padStart(2, '0') }}</span>
+                <span
+                  v-if="handVerdict.configured"
+                  class="hand-badge"
+                  :class="sample.started ? 'ok' : 'off'"
+                >
+                  {{ sample.started ? '可动' : '不可动' }}
+                </span>
+                <span v-if="handNote(sample)" class="hand-sample-note">{{ handNote(sample) }}</span>
+              </div>
+              <div class="hand-grid">
+                <button
+                  v-for="(card, cardIndex) in sample.cards"
+                  :key="`${card.id}-${cardIndex}`"
+                  class="hand-card"
+                  :title="`${card.name} · 点击查看详情`"
+                  @click="openHandCard(card.id)"
+                >
+                  <img :src="cardImageUrl(card.id)" :alt="card.name" loading="lazy" />
+                  <span>{{ card.name }}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+          <div v-else class="empty">主卡组是空的，先去「卡组构筑」把牌配好。</div>
+        </div>
+        <div class="modal-foot">
+          <button class="btn ghost" @click="handModal = false">关闭</button>
+          <button
+            class="btn"
+            title="把当前这批起手连同可动标注画成一张竖版长图"
+            :disabled="handPosterBusy || !handVerdict.total"
+            @click="exportHandPoster"
+          >
+            {{ handPosterBusy ? '生成中…' : '导出长图' }}
+          </button>
+          <button class="btn primary" :disabled="!deckSize" @click="rollHands">
+            重新模拟 {{ HAND_SAMPLES }} 次
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="posterOpen" class="overlay center poster-overlay" @click.self="closePoster">
       <div class="modal poster-modal">
         <div class="modal-head">
           <div>
-            <div style="font-size: 14px; font-weight: 600">启动率长图</div>
+            <div style="font-size: 14px; font-weight: 600">{{ posterKind }}长图</div>
             <div class="inline-note">{{ posterMeta }} · 复制后可直接粘进微信</div>
           </div>
           <button class="icon-btn" aria-label="关闭" @click="closePoster">✕</button>
         </div>
         <div class="modal-body poster-body">
           <div class="poster-preview">
-            <img v-if="posterUrl" :src="posterUrl" alt="启动率长图预览" />
+            <img v-if="posterUrl" :src="posterUrl" :alt="`${posterKind}长图预览`" />
           </div>
         </div>
         <div class="modal-foot">
@@ -2076,6 +2487,10 @@ onUnmounted(() => {
           </button>
         </div>
       </div>
+    </div>
+
+    <div v-if="handCard" class="card-detail-layer" @click.self="handCard = null">
+      <CardDetail :card="handCard" @close="handCard = null" />
     </div>
   </div>
 </template>

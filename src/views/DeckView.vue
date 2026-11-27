@@ -401,39 +401,6 @@ function onStarterCardPick(starterId: string, cardId: number) {
   if (!outcome.ok) toast(outcome.message, true)
 }
 
-/* ---- 模拟起手 ---- */
-
-interface DrawnCard {
-  key: string
-  entry: DeckEntry
-}
-
-const handModal = ref(false)
-const handCards = ref<DrawnCard[]>([])
-
-/** 从主卡组按张数不放回随机抽取，默认 5 张 */
-function rollHand(size = 5) {
-  const pool: DeckEntry[] = []
-  for (const entry of deck.lists.main) {
-    for (let i = 0; i < entry.count; i += 1) pool.push(entry)
-  }
-  const draw = Math.min(size, pool.length)
-  const picked: DeckEntry[] = []
-  for (let i = 0; i < draw; i += 1) {
-    const j = i + Math.floor(Math.random() * (pool.length - i))
-    const swap = pool[j]
-    pool[j] = pool[i]
-    pool[i] = swap
-    picked.push(pool[i])
-  }
-  handCards.value = picked.map((entry, index) => ({ key: `${entry.id}-${index}`, entry }))
-}
-
-function openHand() {
-  rollHand()
-  handModal.value = true
-}
-
 function sectionLabel(section: DeckSection): string {
   return DECK_SECTIONS.find((item) => item.id === section)?.label || ''
 }
@@ -756,7 +723,6 @@ function refreshLibrary() {
         </button>
         <button class="btn sm ghost" @click="oddsModal = true">上手概率</button>
         <button class="btn sm ghost" :disabled="!deck.counts.main" @click="openSmallWorld">小世界现象</button>
-        <button class="btn sm ghost" :disabled="!deck.counts.main" @click="openHand">模拟起手</button>
         <button class="btn sm ghost" :disabled="!deck.counts.main" @click="starterModal = true">启动率</button>
         <span class="grow" />
         <span class="inline-note">
@@ -1302,37 +1268,6 @@ function refreshLibrary() {
             完整推演（含抽滤效果）→
           </RouterLink>
           <button class="btn ghost" @click="starterModal = false">关闭</button>
-        </div>
-      </div>
-    </div>
-
-    <div v-if="handModal" class="overlay center" @click.self="handModal = false">
-      <div class="modal" style="width: min(640px, 100%)">
-        <div class="modal-head">
-          <span style="font-size: 14px; font-weight: 600">模拟起手</span>
-          <button class="icon-btn" @click="handModal = false">✕</button>
-        </div>
-        <div class="modal-body">
-          <div class="inline-note" style="margin-bottom: 12px">
-            从主卡组 {{ deck.counts.main }} 张中随机抽 5 张（不放回，按同名卡张数计权重）。
-          </div>
-          <div v-if="handCards.length" class="hand-grid">
-            <button
-              v-for="item in handCards"
-              :key="item.key"
-              class="hand-card"
-              :title="`${item.entry.name} · 点击查看详情`"
-              @click="openCard(item.entry.id)"
-            >
-              <img :src="cardImageUrl(item.entry.id)" :alt="item.entry.name" loading="lazy" />
-              <span>{{ item.entry.name }}</span>
-            </button>
-          </div>
-          <div v-else class="empty">主卡组为空，无法模拟起手。</div>
-        </div>
-        <div class="modal-foot">
-          <button class="btn ghost" @click="handModal = false">关闭</button>
-          <button class="btn primary" :disabled="!deck.counts.main" @click="rollHand()">再抽一次</button>
         </div>
       </div>
     </div>

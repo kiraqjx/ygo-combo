@@ -30,6 +30,11 @@ export interface DuelCheckpoint {
   turn: number
   phase: number
   createdAt: number
+  /**
+   * 只读标记：读取时发现卡表指纹与当前卡组对不上。
+   * 不落盘（`normalize` 会丢掉它），卡组改回去就自动恢复可载入。
+   */
+  stale?: boolean
 }
 
 const STORAGE_KEY = 'ygo-duel-checkpoints'
@@ -84,6 +89,8 @@ function normalize(raw: unknown): DuelCheckpoint | null {
     turn: Number(item.turn) || 1,
     phase: Number(item.phase) || 0,
     createdAt: Number(item.createdAt) || Date.now(),
+    // 只读标记，永不落盘（万一老数据里带了也丢掉）
+    stale: undefined,
   }
 }
 
@@ -118,18 +125,19 @@ export interface CheckpointFilter {
 }
 
 /**
- * 读取暂存。带 filter 时只返回当前卡组、且卡表没变过的档；
- * 同卡组但卡表变了的会顺手从存储里删掉（回放必然对不上，留着只会误导）。
- * 其他卡组的暂存原样保留，切回去还能用。
+ * 读取暂存。带 filter 时只返回当前卡组的档，卡表变过的标记 `stale` 而不是删掉。
+ *
+ * 以前是「指纹对不上就直接从存储里删」——跨设备恢复时只要指纹差一格
+ * （换版本、卡组被规范化过、或者导入后当前卡组不是存档那套），
+ * 一打开对战区，暂存就被永久抹掉了，用户只会看到「暂存没了」。
+ * 现在留着并标记，卡组改回去或者换个版本还能用，实在不要由用户手删。
  */
 export function loadCheckpoints(filter?: CheckpointFilter): DuelCheckpoint[] {
   const all = readAll()
   if (!filter) return all
-  const valid = (item: DuelCheckpoint) =>
-    item.deckId === filter.deckId && item.deckFingerprint === filter.fingerprint
-  const stale = all.filter((item) => item.deckId === filter.deckId && !valid(item))
-  if (stale.length) persist(all.filter((item) => !stale.includes(item)))
-  return all.filter(valid)
+  return all
+    .filter((item) => item.deckId === filter.deckId)
+    .map((item) => ({ ...item, stale: item.deckFingerprint !== filter.fingerprint }))
 }
 
 /**
@@ -159,17 +167,19 @@ function persist(list: DuelCheckpoint[]) {
   }
 }
 
-/** 存一条，返回这套卡组剩下的暂存（其他卡组的档不受影响） */
+/**
+ * 存一条，返回这套卡组剩下的暂存（其他卡组的档不受影响）。
+ *
+ * 只按「同卡组」做条数上限，不再顺手清掉卡表变过的旧档 ——
+ * 卡组改回去之后它们还能用，清理交给用户。
+ */
 export function saveCheckpoint(checkpoint: DuelCheckpoint): DuelCheckpoint[] {
   const all = readAll()
-  // 同一局（同卡组 + 同种子）重存就覆盖；卡表变了的同卡组旧档一并清掉
-  const sameDeck = all.filter(
-    (item) =>
-      item.deckId === checkpoint.deckId &&
-      item.deckFingerprint === checkpoint.deckFingerprint &&
-      item.id !== checkpoint.id,
-  )
-  const kept = [checkpoint, ...sameDeck].slice(0, LIMIT)
+  const sameDeck = [
+    checkpoint,
+    ...all.filter((item) => item.deckId === checkpoint.deckId && item.id !== checkpoint.id),
+  ]
+  const kept = sameDeck.slice(0, LIMIT)
   persist([...kept, ...all.filter((item) => item.deckId !== checkpoint.deckId)])
   return kept
 }

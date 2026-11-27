@@ -279,10 +279,18 @@ h2,
   }
 }
 
-/* 路由切换：内容轻微上浮，配合主题切换的交叉淡入 */
+/*
+ * 路由切换：内容轻微上浮，配合主题切换的交叉淡入。
+ *
+ * 只能用 backwards，不能用 both：both 会把 to 帧的 transform 一直挂住，
+ * 计算值是 matrix(1,0,0,1,0,0) 而不是 none —— 只要不是 none，元素就成了
+ * position: fixed 后代的包含块。于是 .page 里的弹层（卡组长图、ydk、卡图详情…）
+ * 不再相对视口定位，而是相对整页居中，长页面上就会跑到「页面底部」。
+ * backwards 只在动画开始前套用 from 帧，结束后回到基础样式，不会留 transform。
+ */
 .page,
 .home {
-  animation: relic-rise 0.44s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+  animation: relic-rise 0.44s cubic-bezier(0.22, 0.61, 0.36, 1) backwards;
 }
 
 /* 首页编舞：标题、入口卡依次落位 */

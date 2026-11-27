@@ -55,6 +55,8 @@ const activeDeck = ref<DuelDeck>({ main: [], extra: [] })
 const immersive = ref(false)
 /** 当前卡组自己的暂存，卡组 / 卡表变化时由 refreshCheckpoints() 重算 */
 const checkpoints = ref<DuelCheckpoint[]>([])
+/** 属于其他卡组的暂存条数：列不出来但要让用户知道「不是丢了，是没切卡组」 */
+const otherCheckpointCount = ref(0)
 const checkpointOpen = ref(false)
 /** 结束对局的确认（顺便问要不要导出 .yrp） */
 const endConfirm = ref(false)
@@ -919,14 +921,17 @@ async function startDuel(restore?: DuelCheckpoint) {
 const currentDeckFingerprint = computed(() => deckFingerprint(currentDeck.value))
 
 /**
- * 暂存按卡组隔离：只列当前卡组的档，且卡表变过（指纹对不上）的会被清掉，
- * 因为回放是拿卡组重开一局，卡组换了必然走到别的局面。
+ * 暂存按卡组隔离：只列当前卡组的档。
+ * 卡表变过的档不再删除，而是标 `stale`（回放会走到别的局面，所以不给载入），
+ * 另外统计其他卡组的条数，避免「换台电脑导入后打开对战区，暂存看着没了」。
  */
 function refreshCheckpoints() {
+  const deckId = deckStore.currentDeckId ?? ''
   checkpoints.value = loadCheckpoints({
-    deckId: deckStore.currentDeckId ?? '',
+    deckId,
     fingerprint: currentDeckFingerprint.value,
   })
+  otherCheckpointCount.value = loadCheckpoints().filter((item) => item.deckId !== deckId).length
 }
 
 refreshCheckpoints()
@@ -1459,6 +1464,10 @@ function launchDuel() {
 }
 
 function launchRestore(checkpoint: DuelCheckpoint) {
+  if (checkpoint.stale) {
+    showToast('当前卡组的卡表已经变了，这条暂存无法按原样回放')
+    return
+  }
   checkpointOpen.value = false
   void startDuel(checkpoint)
 }
@@ -2076,7 +2085,8 @@ onBeforeUnmount(() => {
         </div>
         <p class="end-text">
           暂存记录的是开局参数和我方做过的每一步决定。载入后会重开一局并自动操作到存档点，
-          然后交还给你继续打。暂存按卡组独立保存，卡表（卡号 / 张数）改动后旧暂存会自动作废。
+          然后交还给你继续打。暂存按卡组独立保存；卡表（卡号 / 张数）改动后旧档不会被删除，
+          只会标成不可载入，改回去即可恢复。
         </p>
         <div v-if="!checkpoints.length" class="inline-note" style="margin-top: 12px">
           当前卡组还没有暂存。对局中点上方的「暂存」就会存到当前局面。
@@ -2089,13 +2099,26 @@ onBeforeUnmount(() => {
                 第 {{ item.turn }} 回合 · {{ item.steps.length }} 步操作 · {{ item.deckName }}
               </span>
               <span class="chip-dim">{{ new Date(item.createdAt).toLocaleString() }}</span>
+              <span v-if="item.stale" class="chip-dim" style="color: var(--red)">
+                卡表已变 · 不可载入
+              </span>
             </div>
             <div class="cp-actions">
               <button class="btn sm" @click="deleteCheckpoint(item.id)">删除</button>
-              <button class="btn sm primary" :disabled="starting" @click="launchRestore(item)">载入</button>
+              <button
+                class="btn sm primary"
+                :disabled="starting || item.stale"
+                :title="item.stale ? '当前卡组的卡表与存档时不一致，改回去就能载入' : ''"
+                @click="launchRestore(item)"
+              >
+                载入
+              </button>
             </div>
           </div>
         </div>
+        <p v-if="otherCheckpointCount" class="inline-note" style="margin-top: 10px">
+          另有 {{ otherCheckpointCount }} 条暂存属于其他卡组：切到对应卡组后才会列出来。
+        </p>
       </div>
     </div>
 

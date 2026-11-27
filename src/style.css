@@ -4959,6 +4959,24 @@ select.rate-mini {
   align-items: center;
 }
 
+/* 一条检查并进太多卡时的「＋N 张 / 收起」：和 chip 同高，虚线区分 */
+.rate-chips > .rate-gate-more {
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  border: 1px dashed var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--violet);
+  font: inherit;
+  font-size: 10.5px;
+  cursor: pointer;
+}
+
+.rate-chips > .rate-gate-more:hover {
+  border-color: var(--line-strong);
+  color: var(--text);
+}
+
 .rate-chip {
   display: inline-flex;
   align-items: center;
@@ -6234,6 +6252,36 @@ select.rate-mini {
   border-color: var(--line);
   background: rgba(240, 243, 246, 0.06);
   color: var(--text);
+}
+
+/* 多选模式：已勾选的卡 */
+.card-picker-item.picked {
+  border-color: rgba(95, 200, 255, 0.42);
+  background: rgba(95, 200, 255, 0.1);
+  color: var(--text);
+}
+
+.card-picker-tick {
+  flex: 0 0 auto;
+  width: 12px;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--cyan);
+  text-align: right;
+}
+
+.card-picker-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 6px;
+  border-top: 1px solid var(--line);
+}
+
+.card-picker-foot-note {
+  font-size: 11px;
+  color: var(--text-mute);
 }
 
 .card-picker-thumb {

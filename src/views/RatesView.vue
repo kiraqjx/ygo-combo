@@ -90,6 +90,42 @@ function freeCards(clause: RateClause) {
   return mainEntries.value.filter((entry) => !used.has(entry.id))
 }
 
+/**
+ * 主卡组里按卡种筛出的候选：任意魔法 / 任意魔陷 / 任意怪兽。
+ * 启动条件用它一键把「那一类卡」合成一条检查；发动条件那边也用魔陷池做快捷门控。
+ */
+const spellEntries = computed(() =>
+  mainEntries.value.filter((entry) => cards.getCard(entry.id)?.frame === 'spell'),
+)
+const spellTrapEntries = computed(() =>
+  mainEntries.value.filter((entry) => {
+    const frame = cards.getCard(entry.id)?.frame
+    return frame === 'spell' || frame === 'trap'
+  }),
+)
+const monsterEntries = computed(() =>
+  mainEntries.value.filter((entry) => cards.getCard(entry.id)?.frame === 'monster'),
+)
+
+/** 这一组还没用过的卡种候选：快捷门控按钮只加「新增的」那些 */
+function frameFree(clause: RateClause, pool: DeckEntry[]) {
+  const used = new Set(clause.slots.flatMap((slot) => slot.cards.map((card) => card.id)))
+  return pool.filter((entry) => !used.has(entry.id))
+}
+
+/**
+ * 一键加一条「任意卡种」检查（组内 AND）：主卡组里任意一张魔法 / 魔陷 / 怪兽上手即可。
+ * 也就是「单卡 + 任意魔法」这种门控，不用逐张点进选卡器。
+ */
+function addFrameCheck(clauseId: string, pool: DeckEntry[]) {
+  const clause = plan.value.starters.find((item) => item.id === clauseId)
+  if (!clause) return
+  addChecks(
+    clauseId,
+    frameFree(clause, pool).map((entry) => entry.id),
+  )
+}
+
 function cardName(id: number): string {
   return (
     mainEntries.value.find((entry) => entry.id === id)?.name ||
@@ -118,34 +154,42 @@ function removeClause(id: string) {
   })
 }
 
-/** 新建一条检查：默认「至少 1 张」；废件模式则是「合计 = 0」 */
-function addCheck(clauseId: string, cardId: number) {
-  if (!(cardId > 0)) return
-  const entry = mainEntries.value.find((item) => item.id === cardId)
-  if (!entry) return
+/**
+ * 新建一条检查：默认「至少 1 张」；废件模式则是「合计 = 0」。
+ * 一次可以交回多张卡（选卡器多选）：它们并进**同一条检查**，
+ * 算的是合计张数，也就是「任意一张上手即可」（或）。
+ */
+function addChecks(clauseId: string, cardIds: number[]) {
+  const ids = cardIds.filter((id) => mainEntries.value.some((entry) => entry.id === id))
+  if (!ids.length) return
   const ban = Boolean(slotBan.value[clauseId])
   mutate((target) => {
     const clause = target.starters.find((item) => item.id === clauseId)
     if (!clause) return
-    if (clause.slots.some((slot) => slot.cards.some((card) => card.id === cardId))) return
+    const used = new Set(clause.slots.flatMap((slot) => slot.cards.map((card) => card.id)))
+    const cards = ids.filter((id) => !used.has(id)).map((id) => ({ id, name: cardName(id) }))
+    if (!cards.length) return
     clause.slots.push({
       id: nextCheckId(),
-      cards: [{ id: cardId, name: entry.name }],
+      cards,
       min: ban ? 0 : 1,
       max: ban ? 0 : null,
     })
   })
 }
 
-/** 把一张卡并入已有的检查：多张卡时约束的是它们的合计张数 */
-function addCardToCheck(clauseId: string, slotId: string, cardId: number) {
-  if (!(cardId > 0)) return
+/** 把若干张卡并入已有的检查：多张卡时约束的是它们的合计张数（任意一张即可） */
+function addCardsToCheck(clauseId: string, slotId: string, cardIds: number[]) {
+  const ids = cardIds.filter((id) => mainEntries.value.some((entry) => entry.id === id))
+  if (!ids.length) return
   mutate((target) => {
     const clause = target.starters.find((item) => item.id === clauseId)
     const slot = clause?.slots.find((item) => item.id === slotId)
     if (!clause || !slot) return
-    if (clause.slots.some((item) => item.cards.some((card) => card.id === cardId))) return
-    slot.cards.push({ id: cardId, name: cardName(cardId) })
+    const used = new Set(clause.slots.flatMap((item) => item.cards.map((card) => card.id)))
+    const cards = ids.filter((id) => !used.has(id)).map((id) => ({ id, name: cardName(id) }))
+    if (!cards.length) return
+    slot.cards.push(...cards)
   })
 }
 
@@ -473,39 +517,42 @@ function gateCards(slot: RateSlot): Array<{ id: number; name: string }> {
   return gateOpen.value[slot.id] ? slot.cards : slot.cards.slice(0, GATE_PREVIEW)
 }
 
-function pickRequirement(effect: RateEffect, cardId: number, mode: RequirementMode) {
-  if (!(cardId > 0)) return
-  const entry = mainEntries.value.find((item) => item.id === cardId)
-  if (!entry) return
+/**
+ * 追加发动条件。选卡器可以多选，一次交回多张：
+ *   or    → 都放进新开的这一组（同一条检查 = 合计 ≥1 = 或）
+ *   and   → 每张各起一条检查（都要上手 = 且）
+ *   merge → 全部并进上一条检查（合计 ≥1 = 或）
+ */
+function pickRequirements(effect: RateEffect, cardIds: number[], mode: RequirementMode) {
+  const ids = cardIds.filter((id) => mainEntries.value.some((item) => item.id === id))
+  if (!ids.length) return
   mutate((target) => {
     const found = target.effects.find((item) => item.id === effect.id)
     if (!found) return
+    const used = new Set(
+      found.requirement.flatMap((clause) => clause.slots.flatMap((slot) => slot.cards.map((card) => card.id))),
+    )
     // 同一张卡在一个效果的条件里只出现一次
-    if (
-      found.requirement.some((clause) =>
-        clause.slots.some((slot) => slot.cards.some((card) => card.id === cardId)),
-      )
-    ) {
-      return
-    }
-    const card = { id: cardId, name: entry.name }
+    const cards = ids.filter((id) => !used.has(id)).map((id) => ({ id, name: cardName(id) }))
+    if (!cards.length) return
     const last = found.requirement[found.requirement.length - 1]
 
     if (mode === 'and' && last) {
-      // 组内 AND：另起一条检查，两张都要上手
-      last.slots.push({ id: nextCheckId(), cards: [card], min: 1, max: null })
+      // 组内 AND：每张另起一条检查，全都要上手
+      for (const card of cards) {
+        last.slots.push({ id: nextCheckId(), cards: [card], min: 1, max: null })
+      }
       return
     }
     if (mode === 'merge' && last && last.slots.length) {
       // 并入上一条检查：这几张算合计，任意一张即可
-      const slot = last.slots[last.slots.length - 1]
-      slot.cards.push(card)
+      last.slots[last.slots.length - 1].cards.push(...cards)
       return
     }
-    // 新开一组：组间 OR
+    // 新开一组：组间 OR；组内这些卡合计 ≥1，任意一张即可
     found.requirement.push({
-      id: `req-${cardId}-${Date.now().toString(36)}`,
-      slots: [{ id: nextCheckId(), cards: [card], min: 1, max: null }],
+      id: `req-${Date.now().toString(36)}`,
+      slots: [{ id: nextCheckId(), cards, min: 1, max: null }],
     })
   })
 }
@@ -542,14 +589,6 @@ const quickPlayEntries = computed(() =>
   mainEntries.value.filter((entry) => {
     const card = cards.getCard(entry.id)
     return card?.frame === 'spell' && card.kinds.includes('速攻')
-  }),
-)
-
-/** 主卡组里的全部魔法 / 陷阱：作为「手上还有任意一张魔陷」这类门控 */
-const spellTrapEntries = computed(() =>
-  mainEntries.value.filter((entry) => {
-    const card = cards.getCard(entry.id)
-    return card?.frame === 'spell' || card?.frame === 'trap'
   }),
 )
 
@@ -705,12 +744,12 @@ const posterMeta = computed(() => {
   return `${Math.round(blob.size / 1024)} KB · ${blob.type.replace('image/', '').toUpperCase()}`
 })
 
-/** 一个启动组的卡名文案：组内用「＋」表示合计，多条检查用「｜」隔开 */
+/** 一个启动组的卡名文案：同一条检查里的几张卡是「或」，几条检查之间是「且」 */
 function starterCardsText(clause: RateClause): string {
   return clause.slots
-    .map((slot) => slot.cards.map((card) => card.name).join(' ＋ '))
+    .map((slot) => slot.cards.map((card) => card.name).join(' / '))
     .filter(Boolean)
-    .join(' ｜ ')
+    .join(' ＋ ')
 }
 
 function posterStarters(): RatesPosterStarter[] {
@@ -1732,15 +1771,21 @@ onUnmounted(() => {
               <div v-for="slot in clause.slots" :key="slot.id" class="rate-check-row"
                 :class="{ ban: slot.min <= 0 && slot.max === 0 }">
                 <div class="rate-chips">
-                  <span v-for="card in slot.cards" :key="card.id" class="rate-chip"
-                    :class="{ ban: slot.min <= 0 && slot.max === 0 }">
-                    {{ card.name }}
-                    <button title="移出这条检查" @click="removeCardFromCheck(clause.id, slot.id, card.id)">
-                      ✕
-                    </button>
-                  </span>
-                  <CardPicker :options="pickerCards(freeCards(clause))" placeholder="＋ 并入这条检查"
-                    @pick="(cardId) => addCardToCheck(clause.id, slot.id, cardId)" />
+                  <template v-for="(card, cardIndex) in gateCards(slot)" :key="card.id">
+                    <span v-if="cardIndex > 0" class="rate-or" title="同一条检查里这几张任意一张即可">/</span>
+                    <span class="rate-chip" :class="{ ban: slot.min <= 0 && slot.max === 0 }">
+                      {{ card.name }}
+                      <button title="移出这条检查" @click="removeCardFromCheck(clause.id, slot.id, card.id)">
+                        ✕
+                      </button>
+                    </span>
+                  </template>
+                  <button v-if="slot.cards.length > GATE_PREVIEW" class="rate-gate-more"
+                    @click="toggleGate(slot.id)">
+                    {{ gateOpen[slot.id] ? '收起' : `＋${slot.cards.length - GATE_PREVIEW} 张` }}
+                  </button>
+                  <CardPicker multiple :options="pickerCards(freeCards(clause))" placeholder="＋ 并入这条检查（可多选）"
+                    @pick-many="(cardIds) => addCardsToCheck(clause.id, slot.id, cardIds)" />
                 </div>
                 <div class="row wrap" style="gap: 6px; align-items: center">
                   <span class="rate-field-label">合计</span>
@@ -1765,10 +1810,25 @@ onUnmounted(() => {
                   " @click="toggleSlotBan(clause.id)">
                   {{ slotBan[clause.id] ? '快捷配置：合计 0（废件）' : '快捷配置：至少 1 张' }}
                 </button>
-                <CardPicker :options="pickerCards(freeCards(clause))" :placeholder="slotBan[clause.id]
-                    ? '＋ 新建一条「合计 0」检查（废件）'
-                    : '＋ 新建一条检查'
-                  " @pick="(cardId) => addCheck(clause.id, cardId)" />
+                <CardPicker multiple :options="pickerCards(freeCards(clause))" :placeholder="slotBan[clause.id]
+                    ? '＋ 新建一条「合计 0」检查（废件 · 可多选）'
+                    : '＋ 新建一条检查（可多选 · 或）'
+                  " @pick-many="(cardIds) => addChecks(clause.id, cardIds)" />
+                <button v-if="frameFree(clause, spellEntries).length" class="btn xs ghost"
+                  title="新建一条检查：主卡组里任意一张魔法上手即可（单卡 + 任意魔法）"
+                  @click="addFrameCheck(clause.id, spellEntries)">
+                  任意魔法 ×{{ frameFree(clause, spellEntries).length }}
+                </button>
+                <button v-if="frameFree(clause, spellTrapEntries).length" class="btn xs ghost"
+                  title="新建一条检查：主卡组里任意一张魔法 / 陷阱上手即可（单卡 + 任意魔陷）"
+                  @click="addFrameCheck(clause.id, spellTrapEntries)">
+                  任意魔陷 ×{{ frameFree(clause, spellTrapEntries).length }}
+                </button>
+                <button v-if="frameFree(clause, monsterEntries).length" class="btn xs ghost"
+                  title="新建一条检查：主卡组里任意一张怪兽上手即可（单卡 + 任意怪兽）"
+                  @click="addFrameCheck(clause.id, monsterEntries)">
+                  任意怪兽 ×{{ frameFree(clause, monsterEntries).length }}
+                </button>
               </div>
             </div>
 
@@ -1779,6 +1839,9 @@ onUnmounted(() => {
             <div class="inline-note" style="margin-top: 6px">
               每条检查算的是「这些卡的合计张数」：单卡就是那张卡；把多张卡并进同一条就是算总数，
               例如「A、B、C 合计 ≤1」「栗球守卫 + 两颗心灵 合计 ≥1」。
+              选卡器可以多选：一次选中的几张卡会并进<b>同一条检查</b>，也就是任意一张上手即可（或）；
+              要「都得上手」就分几条检查加（组内是且）。「单卡 + 任意魔陷」这类门控可以直接点
+              「任意魔法 / 任意魔陷 / 任意怪兽」按钮，把主卡组里那一类卡合成一条检查。
               组内所有检查都要满足，组间满足任意一组就启动。
               废件新建成「合计 0」的检查：这一组只在手里没有它们时成立，其他组不受影响。
             </div>
@@ -1909,9 +1972,10 @@ onUnmounted(() => {
                       并入上一条（或）
                     </button>
                   </div>
-                  <CardPicker :options="requirementOptions(effect)" placeholder="＋ 添加发动条件" @pick="
-                    (cardId) => pickRequirement(effect, cardId, requirementModeOf(effect))
-                  " />
+                  <CardPicker multiple :options="requirementOptions(effect)" placeholder="＋ 添加发动条件（可多选）"
+                    @pick-many="
+                      (cardIds) => pickRequirements(effect, cardIds, requirementModeOf(effect))
+                    " />
                   <button v-if="quickPlayEntries.length" class="btn xs ghost"
                     title="在最后一组里加一条检查：手上还有任意一张速攻魔法即可" @click="addQuickPlayGate(effect)">
                     ＋ 速攻魔法 ×{{ quickPlayEntries.length }}
@@ -2211,6 +2275,13 @@ onUnmounted(() => {
               「并入上一条」是把卡并进最后一条检查（这几张算合计，<b>任意一张</b>即可）。
               所以「A 且（B 或 C 或 D）」= 一组里两条检查：<code>A ≥1</code> 且 <code>B、C、D 合计 ≥1</code>，
               先加 A，切「组内且」加 B，再切「并入上一条」把 C、D 并进去。
+            </p>
+            <p>
+              <b>选卡器支持多选</b>（一次勾好几张再点「确定添加」）：多选的卡按当前方式落地 ——
+              「新开一组」会变成一组里一条检查（这几张<b>任意一张</b>即可）；
+              「组内且」每张各起一条检查（<b>都要上手</b>）；
+              「并入上一条」全部并进最后一条检查（<b>任意一张</b>即可）。
+              启动条件那边同理：多选 = 并进同一条检查（或），想「且」就分几条检查加。
             </p>
             <p>
               <b>来源卡会自动进发动条件</b>：选中效果来源时会默认补一条「这张卡 ≥1」，因为没上手就发动不了；

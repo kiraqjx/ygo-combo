@@ -4,6 +4,9 @@
  * 支持卡名 / 卡号 / 效果文本检索（走卡库里归一化过的 blob），
  * 列表可以按 optgroup 分组，键盘 ↑↓ + Enter 可选。
  *
+ * `multiple` 打开多选：点击是在「勾选 / 取消」之间切换，弹层底部给出「确定添加」，
+ * 一次交回一组卡号（`pickMany`）。判定语义交给调用方决定（启动率这边是「或」）。
+ *
  * 弹层用 Teleport 挂到 body 上：面板 / 弹窗都有 overflow 与 backdrop-filter，
  * 留在原地会被裁掉（backdrop-filter 还会把 fixed 变成相对容器的定位）。
  */
@@ -39,6 +42,10 @@ const props = withDefaults(
     /** 允许「不指定」：列表顶部出现一条清除项 */
     allowClear?: boolean
     clearLabel?: string
+    /** 多选模式：勾选若干张后一次性交回（emit pickMany） */
+    multiple?: boolean
+    /** 多选模式底部的确认按钮文案 */
+    confirmLabel?: string
   }>(),
   {
     options: () => [],
@@ -49,10 +56,12 @@ const props = withDefaults(
     emptyText: '没有匹配的卡',
     allowClear: false,
     clearLabel: '不指定',
+    multiple: false,
+    confirmLabel: '确定添加',
   },
 )
 
-const emit = defineEmits<{ pick: [id: number]; clear: [] }>()
+const emit = defineEmits<{ pick: [id: number]; pickMany: [ids: number[]]; clear: [] }>()
 
 const cards = useCardStore()
 
@@ -63,6 +72,8 @@ const root = ref<HTMLElement | null>(null)
 const popRef = ref<HTMLElement | null>(null)
 const inputEl = ref<HTMLInputElement | null>(null)
 const popStyle = ref<Record<string, string>>({})
+/** 多选模式下已勾选的卡号，按勾选顺序保存 */
+const picked = ref<number[]>([])
 
 function lane(item: PickerCard): string {
   const card = cards.getCard(item.id)
@@ -118,7 +129,28 @@ function close() {
   query.value = ''
 }
 
+function togglePick(item: PickerCard) {
+  picked.value = picked.value.includes(item.id)
+    ? picked.value.filter((id) => id !== item.id)
+    : [...picked.value, item.id]
+}
+
+/** 多选确认：一次交回全部勾选的卡号 */
+function confirmMany() {
+  if (!picked.value.length) {
+    close()
+    return
+  }
+  emit('pickMany', [...picked.value])
+  close()
+}
+
 function pick(item: PickerCard) {
+  if (props.multiple) {
+    togglePick(item)
+    void nextTick(positionPop)
+    return
+  }
   emit('pick', item.id)
   if (props.stayOpen) {
     query.value = ''
@@ -183,6 +215,8 @@ function onViewportChange() {
 
 watch(open, (value) => {
   if (value) {
+    // 每次打开都从「一张没选」开始，免得把上次没确认的勾选带进来
+    picked.value = []
     document.addEventListener('pointerdown', onOutside)
     window.addEventListener('resize', onViewportChange)
     window.addEventListener('scroll', onViewportChange, true)
@@ -264,9 +298,12 @@ function globalIndex(item: PickerCard): number {
               :key="`${section.label}-${item.id}`"
               type="button"
               class="card-picker-item"
-              :class="{ active: globalIndex(item) === active }"
+              :class="{
+                active: globalIndex(item) === active,
+                picked: multiple && picked.includes(item.id),
+              }"
               role="option"
-              :aria-selected="globalIndex(item) === active"
+              :aria-selected="multiple ? picked.includes(item.id) : globalIndex(item) === active"
               @click="pick(item)"
               @mouseenter="active = globalIndex(item)"
             >
@@ -280,9 +317,20 @@ function globalIndex(item: PickerCard): number {
               <span class="card-picker-name">{{ item.name }}</span>
               <span v-if="item.hint" class="card-picker-hint">{{ item.hint }}</span>
               <span v-if="item.count" class="card-picker-count">×{{ item.count }}</span>
+              <span v-if="multiple" class="card-picker-tick" aria-hidden="true">
+                {{ picked.includes(item.id) ? '✓' : '' }}
+              </span>
             </button>
           </template>
           <div v-if="!flat.length" class="card-picker-empty">{{ emptyText }}</div>
+        </div>
+        <div v-if="multiple" class="card-picker-foot">
+          <span class="card-picker-foot-note">
+            已选 {{ picked.length }} 张
+          </span>
+          <button type="button" class="btn xs ghost" :disabled="!picked.length" @click="confirmMany">
+            {{ confirmLabel }}
+          </button>
         </div>
       </div>
     </Teleport>
